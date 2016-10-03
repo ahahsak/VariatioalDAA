@@ -72,7 +72,7 @@ def lnZ_Wishart(nu, V):
     '''
     if nu < len(V) + 1:
         raise ValueError("dof parameter nu must larger than len(V)")
-'''
+    '''
     D = len(V)
     lnZ = 0.5 * nu * (D * np.log(2.0) - np.log(det(V))) \
         + gammaln(np.arange(nu + 1 - D, nu + 1) * 0.5).sum()
