@@ -180,9 +180,9 @@ def sample_gaussian(m, cv, n=1):
     """Generate random samples from a Gaussian distribution.
     Parameters
     ----------
-    m : array_like, shape (ndim)
+    m : array, shape (ndim)
         Mean of the distribution.
-    cv : array_like, shape (ndim,ndim)
+    cv : array, shape (ndim,ndim)
         Covariance of the distribution.
     n : int, optional
         Number of samples to generate. Defaults to 1.
