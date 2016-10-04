@@ -125,7 +125,7 @@ class VB_HMM():
         self._Xbar = np.dot(self.z.T, obs) / self._N[:, np.newaxis]
         for k in range(nmix):
             d_obs = obs - self._Xbar[k]
-            self._C = np.dot((self.z[:, k] * d_obs.T), d_obs)
+            self._C[k] = np.dot((self.z[:, k] * d_obs.T), d_obs)
 
     def _update_parameters(self, obs, lnXi, lnGamma):
         nmix = self.n_states
@@ -145,6 +145,7 @@ class VB_HMM():
         self._beta = self._beta0 + self._N
         self._nu = self._nu0 + self._N
         self._V = self._V0 + self._C
+
         for k in range(nmix):
             self._m[k] = (self._beta0 * self._m0 +
                           self._N[k] * self._Xbar[k]) / self._beta[k]
@@ -227,7 +228,7 @@ class VB_HMM():
         Then obtain variational free energy and posterior over hidden states
         """
 
-        lnF = self._log_like_F(obs)
+        lnF = self._log_like_f(obs)
         lnAlpha, lnBeta, lnXi = self.allocate_fb(obs)
         lnXi, lnGamma, lnP = self._Estep(lnF, lnAlpha, lnBeta, lnXi)
         z = np.exp(lnGamma)
@@ -315,7 +316,7 @@ class VB_HMM():
         """
         Get the most probable cluster id
         """
-        z, lnP = self.eval_hidden_states(obs)
+        z, lnP = self._eval_hidden_states(obs)
         return z.argmax(1)
 
     def simulate(self, T):
