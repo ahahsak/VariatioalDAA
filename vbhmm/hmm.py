@@ -3,7 +3,7 @@ from numpy.random import rand, dirichlet, normal, random, randn
 from scipy.cluster import vq
 from scipy.special import gammaln, digamma
 from scipy.linalg import eig, inv, cholesky
-from util import *
+from vbhmm.util import *
 
 """
     VB-HMM with Gaussian emission probability.
