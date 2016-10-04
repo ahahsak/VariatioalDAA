@@ -40,6 +40,7 @@ class VB_HMM():
         lnAlpha = np.zeros((T, self.n_states))  # log forward variable
         lnBeta = np.zeros((T, self.n_states))  # log backward variable
         lnXi = np.zeros((T - 1, self.n_states, self.n_states))
+        return lnAlpha, lnBeta, lnXi
 
     def forward(self, lnF, lnAlpha):
         """
@@ -93,10 +94,10 @@ class VB_HMM():
         self._m0 = np.mean(obs, 0)
         self._V0 = np.atleast_2d(np.cov(obs.T)) * scale
 
-        self.A = dirichlet([1.0] * n, n)   # A:状態遷移行列
+        self.A = dirichlet([1.0] * n_states, n_states)   # A:状態遷移行列
         # self.lnA = np.log(A)
 
-        self.pi = np.tile(1.0 / n, n)  # pi:初期状態確率
+        self.pi = np.tile(1.0 / n_states, n_states)  # pi:初期状態確率
         # self.lnPi = np.log(pi)
 
         # posterior for hidden states
@@ -168,7 +169,7 @@ class VB_HMM():
         KL += KLPi + KLA + KLg
         return KL
 
-    def getExpectations(self):
+    def get_expectations(self):
         """
         Calculate expectations of parameters over posterior distribution
         """
@@ -245,14 +246,19 @@ class VB_HMM():
         F = -lnP + self._KL_div()
         return F
 
-    def fit(self, obs, n_iter=10000, eps=1.0e-4, ifreq=10, old_F=1.0e20):
+    def fit(self, obs, n_iter=10000, eps=1.0e-4,
+            ifreq=10, old_F=1.0e20, init=True):
         '''Fit the HMM via VB-EM algorithm'''
+        if init:
+            self.initialize_vbhmm(obs)
+            old_F = 1.0e20
+            lnAlpha, lnBeta, lnXi = self.allocate_fb(obs)
 
         for i in range(n_iter):
             # VB-E step
-            self.lnF = self._log_like_f(obs, _nu, _V, _beta, _m)
+            self.lnF = self._log_like_f(obs)
             self.lnXi, self.lnGamma, self.lnP = self._Estep(
-                lnF, lnAlpha, lnBeta, lnXi)
+                self.lnF, lnAlpha, lnBeta, lnXi)
 
             # check convergence
             KL = self._KL_div()
@@ -275,12 +281,12 @@ class VB_HMM():
             # update parameters via VB-M step
             self.Mstep(obs, lnXi, lnGamma)
 
-    def showModel(self, show_pi=True, show_A=True, show_mu=False,
-                  show_cv=False, eps=1.0e-2):
+    def show_model(self, show_pi=True, show_A=True, show_mu=False,
+                   show_cv=False, eps=1.0e-2):
         """
         return parameters of relavent clusters
         """
-        self.getExpectations()
+        self.get_expectations()
         ids = []
         sorted_ids = (-self.pi).argsort()
         for k in sorted_ids:
@@ -326,8 +332,3 @@ class VB_HMM():
             z[t] = (A_cdf[z[t - 1]] > r[t]).argmax()
             o[t] = sample_gaussian(self.mu[z[t]], self.cv[z[t]])
         return z, o
-
-model = VB_HMM(10)
-model.mu = np.array([[3.0, 3.0], [0.0, 0.0], [-4.0, 0.0]])
-model.cv = np.tile(np.identity(2), (3, 1, 1))
-model.lnA = np.log([[0.9, 0.05, 0.05], [0.1, 0.7, 0.2], [0.1, 0.4, 0.5]])
