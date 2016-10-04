@@ -131,7 +131,7 @@ class VB_HMM():
         nmix = self.n_states
         T, D = obs.shape
         # update parameters of initial prob
-        self._WPi = self._uPi + self.z0
+        self._wPi = self._uPi + self.z0
         self._lnPi = digamma(self._wPi) - digamma(self._wPi.sum())
 
         # update parameters of transition prob
