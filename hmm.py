@@ -54,7 +54,7 @@ class VB_HMM():
         """
         T = len(lnF)
         lnAlpha *= 0.0
-        lnAlpha[0, :] = self.lnPi + lnF[0, :]
+        lnAlpha[0, :] = self._lnPi + lnF[0, :]
 
         for t in range(1, T):
             lnAlpha[t, :] = logsum(lnAlpha[t - 1, :] +
@@ -77,9 +77,9 @@ class VB_HMM():
 
         for t in range(T - 2, -1, -1):
             lnBeta[t, :] = logsum(
-                self.lnA + lnF[t + 1, :] + lnBeta[t + 1, :], 1)
+                self._lnA + lnF[t + 1, :] + lnBeta[t + 1, :], 1)
 
-        return lnBeta, logsum(lnBeta[0, :] + lnF[0, :] + self.lnPi)
+        return lnBeta, logsum(lnBeta[0, :] + lnF[0, :] + self._lnPi)
 
     def initialize_vbhmm(self, obs, scale=10.0):
         n_states = self.n_states
@@ -150,7 +150,7 @@ class VB_HMM():
                           self._N[k] * self._Xbar[k]) / self._beta[k]
             dx = self._Xbar[k] - self._m0
             self._V[k] += (self._beta0 * self._N[k] /
-                           self._beta[k]) * np.outer(dx, dx)
+                           self._beta[k] + self._N[k]) * np.outer(dx, dx)
 
     def _KL_div(self):
         """
@@ -257,7 +257,7 @@ class VB_HMM():
         for i in range(n_iter):
             # VB-E step
             self.lnF = self._log_like_f(obs)
-            self.lnXi, self.lnGamma, self.lnP = self._Estep(
+            lnXi, self.lnGamma, lnP = self._Estep(
                 self.lnF, lnAlpha, lnBeta, lnXi)
 
             # check convergence
@@ -279,7 +279,7 @@ class VB_HMM():
             print(old_F)
 
             # update parameters via VB-M step
-            self.Mstep(obs, lnXi, lnGamma)
+            self.Mstep(obs, lnXi, self.lnGamma)
 
     def show_model(self, show_pi=True, show_A=True, show_mu=False,
                    show_cv=False, eps=1.0e-2):
