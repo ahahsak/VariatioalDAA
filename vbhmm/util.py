@@ -54,7 +54,7 @@ def lnZ_Dirichlet(alpha):
     """
     log normalization constant of Dirichlet distribution
     input
-      alpha [ndarray, shape (nmix)] : parameter of Dirichlet dist
+      alpha [ndarray, shape (nmix)] : parameter of Dirichlet distribution
     """
 
     Z = gammaln(alpha).sum() - gammaln(alpha.sum())
