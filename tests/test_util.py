@@ -28,7 +28,9 @@ def test_lnZ_Dirichlet():
 @nottest
 def test_lnZ_Wishart():
     nu = 0.1
-    V = np.atleast_2d(np.cov(10)) * 10
+    obs = np.ones((5, 5))
+    V = np.atleast_2d(np.cov(obs.T)) * 10
+    lnZ = util.lnZ_Wishart(nu, V)
     ok_(nu >= len(V) + 1)
 
 
