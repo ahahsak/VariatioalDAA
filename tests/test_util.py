@@ -1,5 +1,6 @@
 import numpy as np
 import vbhmm.util as util
+from vbhmm.hmm import VB_HMM
 from nose.tools import assert_equal, ok_, nottest
 
 
@@ -28,10 +29,14 @@ def test_lnZ_Dirichlet():
 @nottest
 def test_lnZ_Wishart():
     nu = 0.1
-    obs = np.ones((5, 5))
-    V = np.atleast_2d(np.cov(obs.T)) * 10
+    model = VB_HMM(3)
+    mu = np.array([[3.0, 3.0], [0.0, 0.0], [-4.0, 0.0]])
+    cv = np.tile(np.identity(2), (3, 1, 1))
+    z, o2 = model.simulate(50 * 10, mu, cv)
+    V = np.atleast_2d(np.cov(o2.T)) * 10
     lnZ = util.lnZ_Wishart(nu, V)
-    ok_(nu >= len(V) + 1)
+    #ok_(3.9 < lnZ < 4.0)
+    pass
 
 
 @nottest
