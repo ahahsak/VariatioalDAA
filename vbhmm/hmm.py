@@ -17,7 +17,8 @@ class VB_HMM():
                  beta0=1, nu0=1, s0=0.01):
 
         self.n_states = n
-        self._lnPi = np.log(np.tile(1.0 / n, n))  # log initial probability
+        # log initial probability
+        self._lnPi = np.log(np.tile(1.0 / n, n))
         # log transition probability
         self._lnA = np.log(dirichlet([1.0] * n, n))
 
@@ -58,7 +59,7 @@ class VB_HMM():
 
         for t in range(1, T):
             lnAlpha[t, :] = logsum(lnAlpha[t - 1, :] +
-                                   self.lnA.T, 1) + lnF[t, :]
+                                   self._lnA.T, 1) + lnF[t, :]
 
         return lnAlpha, logsum(lnAlpha[-1, :])
 
@@ -95,10 +96,7 @@ class VB_HMM():
         self._V0 = np.atleast_2d(np.cov(obs.T)) * scale
 
         self.A = dirichlet([1.0] * n_states, n_states)   # A:状態遷移行列
-        # self.lnA = np.log(A)
-
         self.pi = np.tile(1.0 / n_states, n_states)  # pi:初期状態確率
-        # self.lnPi = np.log(pi)
 
         # posterior for hidden states
         self.z = dirichlet(np.tile(1.0 / n_states, n_states), T)
@@ -209,7 +207,7 @@ class VB_HMM():
         for i in range(self.n_states):
             for j in range(self.n_states):
                 for t in range(T - 1):
-                    lnXi[t, i, j] = lnAlpha[t, i] + self.lnA[i, j, ] + \
+                    lnXi[t, i, j] = lnAlpha[t, i] + self._lnA[i, j, ] + \
                         lnF[t + 1, j] + lnBeta[t + 1, j]
         lnXi -= lnPx_f
 
