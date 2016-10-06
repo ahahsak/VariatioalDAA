@@ -35,7 +35,7 @@ class VB_HMM():
         self._nu0 = nu0
         self._s0 = s0
 
-    def allocate_fb(self, obs):
+    def _allocate_fb(self, obs):
         # fbアルゴリズムを走らせた時の一時保存用
         T = len(obs)
         lnAlpha = np.zeros((T, self.n_states))  # log forward variable
@@ -43,7 +43,7 @@ class VB_HMM():
         lnXi = np.zeros((T - 1, self.n_states, self.n_states))
         return lnAlpha, lnBeta, lnXi
 
-    def forward(self, lnF, lnAlpha):
+    def _forward(self, lnF, lnAlpha):
         """
         Use forward algorith to calculate forward variables and loglikelihood
         input
@@ -63,7 +63,7 @@ class VB_HMM():
 
         return lnAlpha, logsum(lnAlpha[-1, :])
 
-    def backward(self, lnF, lnBeta):
+    def _backward(self, lnF, lnBeta):
         """
         Use backward algorith to calculate backward variables and loglikelihood
         input
@@ -82,7 +82,7 @@ class VB_HMM():
 
         return lnBeta, logsum(lnBeta[0, :] + lnF[0, :] + self._lnPi)
 
-    def initialize_vbhmm(self, obs, scale=10.0):
+    def _initialize_vbhmm(self, obs, scale=10.0):
         n_states = self.n_states
 
         T, D = obs.shape
@@ -168,7 +168,7 @@ class VB_HMM():
         KL += KLPi + KLA + KLg
         return KL
 
-    def get_expectations(self):
+    def _get_expectations(self):
         """
         Calculate expectations of parameters over posterior distribution
         """
@@ -195,8 +195,8 @@ class VB_HMM():
         """
         T = len(lnF)
         # forward-backward algorithm
-        lnAlpha, lnPx_f = self.forward(lnF, lnAlpha)
-        lnBeta, lnPx_b = self.backward(lnF, lnBeta)
+        lnAlpha, lnPx_f = self._forward(lnF, lnAlpha)
+        lnBeta, lnPx_b = self._backward(lnF, lnBeta)
 
         # check if forward and backward were done correctly
         dlnP = lnPx_f - lnPx_b
@@ -216,7 +216,7 @@ class VB_HMM():
 
         return lnXi, lnGamma, lnPx_f
 
-    def Mstep(self, obs, lnXi, lnGamma):
+    def _Mstep(self, obs, lnXi, lnGamma):
         self._calculate_sufficient_statistics(obs, lnXi, lnGamma)
         self._update_parameters(obs, lnXi, lnGamma)
 
@@ -227,7 +227,7 @@ class VB_HMM():
         """
 
         lnF = self._log_like_f(obs)
-        lnAlpha, lnBeta, lnXi = self.allocate_fb(obs)
+        lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
         lnXi, lnGamma, lnP = self._Estep(lnF, lnAlpha, lnBeta, lnXi)
         z = np.exp(lnGamma)
         return z, lnP
@@ -249,9 +249,9 @@ class VB_HMM():
             ifreq=10, old_F=1.0e20, init=True):
         '''Fit the HMM via VB-EM algorithm'''
         if init:
-            self.initialize_vbhmm(obs)
+            self._initialize_vbhmm(obs)
             old_F = 1.0e20
-            lnAlpha, lnBeta, lnXi = self.allocate_fb(obs)
+            lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
 
         for i in range(n_iter):
             # VB-E step
@@ -278,14 +278,14 @@ class VB_HMM():
             print(old_F)
 
             # update parameters via VB-M step
-            self.Mstep(obs, lnXi, self.lnGamma)
+            self._Mstep(obs, lnXi, self.lnGamma)
 
     def show_model(self, show_pi=True, show_A=True, show_mu=False,
                    show_cv=False, eps=1.0e-2):
         """
         return parameters of relavent clusters
         """
-        self.get_expectations()
+        self._get_expectations()
         ids = []
         sorted_ids = (-self.pi).argsort()
         for k in sorted_ids:
