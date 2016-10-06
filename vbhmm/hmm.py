@@ -317,8 +317,8 @@ class VB_HMM():
         z, lnP = self._eval_hidden_states(obs)
         return z.argmax(1)
 
-    def simulate(self, T, mu, cv):
-        N, D = mu.shape
+    def simulate(self, T):
+        N, D = self.mu.shape
 
         pi_cdf = np.exp(self._lnPi).cumsum()
         A_cdf = np.exp(self._lnA).cumsum(1)
@@ -326,8 +326,8 @@ class VB_HMM():
         o = np.zeros((T, D))
         r = random(T)
         z[0] = (pi_cdf > r[0]).argmax()
-        o[0] = sample_gaussian(mu[z[0]], cv[z[0]])
+        o[0] = sample_gaussian(self.mu[z[0]], self.cv[z[0]])
         for t in range(1, T):
             z[t] = (A_cdf[z[t - 1]] > r[t]).argmax()
-            o[t] = sample_gaussian(mu[z[t]], cv[z[t]])
+            o[t] = sample_gaussian(self.mu[z[t]], self.cv[z[t]])
         return z, o
