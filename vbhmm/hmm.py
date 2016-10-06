@@ -289,7 +289,7 @@ class VB_HMM():
         ids = []
         sorted_ids = (-self.pi).argsort()
         for k in sorted_ids:
-            if pi[k] > eps:
+            if self.pi[k] > eps:
                 ids.append(k)
         pi = self.pi[ids]
         mu = self.mu[ids]
