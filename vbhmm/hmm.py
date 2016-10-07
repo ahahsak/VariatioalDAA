@@ -255,9 +255,8 @@ class VB_HMM():
 
         for i in range(n_iter):
             # VB-E step
-            self.lnF = self._log_like_f(obs)
-            lnXi, self.lnGamma, lnP = self._Estep(
-                self.lnF, lnAlpha, lnBeta, lnXi)
+            lnF = self._log_like_f(obs)
+            lnXi, lnGamma, lnP = self._Estep(lnF, lnAlpha, lnBeta, lnXi)
 
             # check convergence
             KL = self._KL_div()
@@ -278,7 +277,7 @@ class VB_HMM():
             print(old_F)
 
             # update parameters via VB-M step
-            self._Mstep(obs, lnXi, self.lnGamma)
+            self._Mstep(obs, lnXi, lnGamma)
 
     def show_model(self, show_pi=True, show_A=True, show_mu=False,
                    show_cv=False, eps=1.0e-2):
