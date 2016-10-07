@@ -36,7 +36,7 @@ def normalize(A, axis=None):
     return A / Asum
 
 
-def KL_Dirichlet(alpha1, alpha2):
+def kl_dirichlet(alpha1, alpha2):
     """
     KL-div of Dirichlet distribution KL[q(alpha1)||p(alpha2)]
     input
@@ -44,13 +44,13 @@ def KL_Dirichlet(alpha1, alpha2):
       alpha2 [ndarray, shape (nmix)] : parameter of 2nd Dirichlet dist
     """
 
-    KL = - lnZ_Dirichlet(alpha1) + lnZ_Dirichlet(alpha2) \
+    kl = - lnz_dirichlet(alpha1) + lnz_dirichlet(alpha2) \
         + np.dot((alpha1 - alpha2), (digamma(alpha1) - digamma(alpha1.sum())))
 
-    return KL
+    return kl
 
 
-def lnZ_Dirichlet(alpha):
+def lnz_dirichlet(alpha):
     """
     log normalization constant of Dirichlet distribution
     input
@@ -61,7 +61,7 @@ def lnZ_Dirichlet(alpha):
     return Z
 
 
-def lnZ_Wishart(nu, V):
+def lnz_wishart(nu, V):
     """
     log normalization constant of Wishart distribution
     input
@@ -80,7 +80,7 @@ def lnZ_Wishart(nu, V):
     return lnZ
 
 
-def log_like_Gauss(obs, nu, V, beta, m):
+def log_like_gauss(obs, nu, V, beta, m):
     """
     Log probability for Gaussian with full covariance matrices.
     Here mean vectors and covarience matrices are probability variable with
@@ -91,7 +91,7 @@ def log_like_Gauss(obs, nu, V, beta, m):
     lnf = np.empty((nobs, nmix))
     for k in range(nmix):
         dln2pi = ndim * np.log(2.0 * np.pi)
-        lndetV = - E_lndetW_Wishart(nu[k], V[k])
+        lndetV = - e_lndetw_wishart(nu[k], V[k])
         cv = V[k] / nu[k]
         q = _sym_quad_form(obs, m[k], cv) + ndim / beta[k]
         lnf[:, k] = -0.5 * (dln2pi + lndetV + q)
@@ -107,7 +107,7 @@ def _sym_quad_form(x, mu, A):
     return q
 
 
-def E_lndetW_Wishart(nu, V):
+def e_lndetw_wishart(nu, V):
     """
     mean of log determinant of precision matrix over Wishart <lndet(W)>
     input
@@ -122,7 +122,7 @@ def E_lndetW_Wishart(nu, V):
     return E
 
 
-def KL_Wishart(nu1, V1, nu2, V2):
+def kl_wishart(nu1, V1, nu2, V2):
     """
     KL-div of Wishart distribution KL[q(nu1,V1)||p(nu2,V2)]
     """
@@ -138,19 +138,19 @@ def KL_Wishart(nu1, V1, nu2, V2):
     '''
 
     D = len(V1)
-    KL = 0.5 * ((nu1 - nu2) * E_lndetW_Wishart(nu1, V1) + nu1 *
-                (np.trace(solve(V1, V2)) - D)) - lnZ_Wishart(nu1, V1)
-    + lnZ_Wishart(nu2, V2)
+    kl = 0.5 * ((nu1 - nu2) * e_lndetw_wishart(nu1, V1) + nu1 *
+                (np.trace(solve(V1, V2)) - D)) - lnz_wishart(nu1, V1)
+    + lnz_wishart(nu2, V2)
 
     '''
     if KL < _small_negative_number:
         print(nu1, nu2, V1, V2)
         raise ValueError("KL must be larger than 0")
     '''
-    return KL
+    return kl
 
 
-def KL_GaussWishart(nu1, V1, beta1, m1, nu2, V2, beta2, m2):
+def kl_gauss_wishart(nu1, V1, beta1, m1, nu2, V2, beta2, m2):
     """
     KL-div of Gauss-Wishart distr KL[q(nu1,V1,beta1,m1)||p(nu2,V2,beta2,m2)
     """
@@ -161,19 +161,19 @@ def KL_GaussWishart(nu1, V1, beta1, m1, nu2, V2, beta2, m2):
     D = len(m1)
 
     # first assign KL of Wishart
-    KL1 = KL_Wishart(nu1, V1, nu2, V2)
+    kl1 = kl_wishart(nu1, V1, nu2, V2)
 
     # the rest terms
-    KL2 = 0.5 * (D * (np.log(beta1 / float(beta2)) + beta2 / float(beta1) -
+    kl2 = 0.5 * (D * (np.log(beta1 / float(beta2)) + beta2 / float(beta1) -
                       1.0) + beta2 * nu1 * np.dot((m1 - m2),
                                                   solve(V1, (m1 - m2))))
 
-    KL = KL1 + KL2
+    kl = kl1 + kl2
     '''
     if KL < _small_negative_number:
         raise ValueError("KL must be larger than 0")
     '''
-    return KL
+    return kl
 
 
 def sample_gaussian(m, cv, n=1):

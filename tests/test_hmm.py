@@ -1,6 +1,6 @@
 import numpy as np
 import vbhmm.hmm as hmm
-from vbhmm.hmm import VB_HMM
+from vbhmm.hmm import VbHmm
 import vbhmm.util as util
 from nose.tools import assert_equal, ok_, nottest
 
@@ -77,7 +77,7 @@ def test_fit():
 
 @nottest
 def test_showModel():
-    model = VB_HMM(3)
+    model = VbHmm(3)
     mu = np.array([[3.0, 3.0], [0.0, 0.0], [-4.0, 0.0]])
     cv = np.tile(np.identity(2), (3, 1, 1))
     # model.lnA = np.log([[0.9, 0.05, 0.05], [0.1, 0.7, 0.2], [0.1, 0.4, 0.5]])
