@@ -26,7 +26,6 @@ def test_lnZ_Dirichlet():
     ok_(2.54 < actual < 2.55)
 
 
-@nottest
 def test_lnZ_Wishart():
     nu = 0.1
     model = VB_HMM(3)
@@ -35,8 +34,7 @@ def test_lnZ_Wishart():
     z, o2 = model.simulate(50 * 10, mu, cv)
     V = np.atleast_2d(np.cov(o2.T)) * 10
     lnZ = util.lnZ_Wishart(nu, V)
-    #ok_(3.9 < lnZ < 4.0)
-    pass
+    ok_(3.9 < lnZ < 4.0)
 
 
 @nottest
