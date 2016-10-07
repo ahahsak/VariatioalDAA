@@ -255,9 +255,8 @@ class VbHmm():
 
         for i in range(N_ITER):
             # VB-E step
-            self.lnf = self._log_like_f(obs)
-            lnxi, self.lngamma, lnp = self._e_step(
-                self.lnf, lnalpha, lnbeta, lnxi)
+            lnf = self._log_like_f(obs)
+            lnxi, lngamma, lnp = self._e_step(lnf, lnalpha, lnbeta, lnxi)
 
             # check convergence
             kl = self._kl_div()
@@ -278,7 +277,7 @@ class VbHmm():
             print(OLD_F)
 
             # update parameters via VB-M step
-            self._m_step(obs, lnxi, self.lngamma)
+            self._m_step(obs, lnxi, lngamma)
 
     def show_model(self, SHOW_PI=True, SHOW_A=True, SHOW_MU=False,
                    SHOW_CV=False, EPS=1.0e-2):
