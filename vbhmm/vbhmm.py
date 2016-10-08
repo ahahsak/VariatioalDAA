@@ -31,10 +31,14 @@ class VbHmm(GaussianHmmBase):
         self._nu0 = NU0
         self._s0 = S0
 
+    def _log_like_f(self, obs):
+        return log_like_gauss(obs, self._nu, self._v, self._beta, self._m)
+
     def _initialize_vbhmm(self, obs, scale=10.0):
         GaussianHmmBase._initialize_hmm(self, obs)
 
         n_states = self.n_states
+        T, D = obs.shape
 
         if self._nu0 < D:
             self._nu0 += D
