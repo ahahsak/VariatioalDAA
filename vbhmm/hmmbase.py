@@ -97,6 +97,9 @@ class GaussianHmmBase():
 
         return lnbeta, logsum(lnbeta[0, :] + lnf[0, :] + self._lnpi)
 
+    def _log_like_f(self, obs):
+        pass
+
     def _eval_hidden_states(self, obs):
         """
         Estep
