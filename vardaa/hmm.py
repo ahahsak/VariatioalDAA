@@ -5,13 +5,12 @@ from scipy.special import gammaln, digamma
 from scipy.linalg import eig, inv, cholesky
 from vardaa.util import *
 
-"""
-    VB-HMM with Gaussian emission probability.
-    VB-E step is Forward-Backward Algorithm.
-"""
-
 
 class VbHmm():
+    """
+    VB-HMM with Gaussian emission probability.
+    VB-E step is Forward-Backward Algorithm.
+    """
 
     def __init__(self, n, uPi0=0.5, uA0=0.5, m0=0.0, beta0=1, nu0=1, s0=0.01):
 
