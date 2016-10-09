@@ -30,26 +30,6 @@ class GaussianHmmBase():
         self.mu, temp = vq.kmeans2(obs, n_states)
         self.cv = np.tile(np.identity(D), (n_states, 1, 1))
 
-        """
-        if self._nu0 < D:
-            self._nu0 += D
-
-        self._m0 = np.mean(obs, 0)
-        self._v0 = np.atleast_2d(np.cov(obs.T)) * scale
-
-        # posterior for hidden states
-        self.z = dirichlet(np.tile(1.0 / n_states, n_states), T)
-        # for mean vector
-        self._m, temp = vq.kmeans2(obs, n_states, minit='points')
-        self._beta = np.tile(self._beta0, n_states)
-        # for covarience matrix
-        self._v = np.tile(np.array(self._v0), (n_states, 1, 1))
-        self._nu = np.tile(float(T) / n_states, n_states)
-
-        # aux valable
-        self._c = np.array(self._v)
-        """
-
     def _allocate_fb(self, obs):
         # fbアルゴリズムを走らせた時の一時保存用
         T = len(obs)
@@ -138,7 +118,7 @@ class GaussianHmmBase():
                         lnf[t + 1, j] + lnbeta[t + 1, j]
         lnxi -= lnpx_f
 
-        # compute lnGamma for postetior on hidden states
+        # compute lnGamma for postetior on hidden states z
         lngamma = lnalpha + lnbeta - lnpx_f
 
         return lnxi, lngamma, lnpx_f

@@ -59,7 +59,7 @@ class VbHmm(GaussianHmmBase):
         self._c = np.array(self._v)
 
     def _calculate_sufficient_statistics(self, obs, lnxi, lngamma):
-        # z[n,k] = Q(zn=k)
+        # z[n,k] = q(zn=k)
         nmix = self.n_states
         t, d = obs.shape
         self.z = np.exp(np.vstack(lngamma))
@@ -80,11 +80,11 @@ class VbHmm(GaussianHmmBase):
         # update parameters of transition prob
         self._wa = self._ua + np.exp(lnxi).sum()
         self._lnA = digamma(self._wa) - digamma(self._wa)
-
         for k in range(nmix):
             self._lnA[k, :] = digamma(
                 self._wa[k, :]) - digamma(self._wa[k, :].sum())
 
+        # update parameters of emmition prob (Gaussian distribution)
         self._beta = self._beta0 + self._n
         self._nu = self._nu0 + self._n
         self._v = self._v0 + self._c
