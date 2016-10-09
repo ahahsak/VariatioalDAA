@@ -1,4 +1,4 @@
-# Variational Inference for Double Articulation Analyzer
+# VB_HMM
 
 <!-- badges -->
 [![Build Status](https://travis-ci.org/ahahsak/VB_HMM.svg?branch=master)](https://travis-ci.org/ahahsak/VB_HMM)
