@@ -1,5 +1,6 @@
 #!/bin/bash
 
-pylint --disable=C,E vbhmm || true
-pylint -E vbhmm
-nosetests --with-coverage --cover-package=vbhmm
+pylint --disable=C,E vardaa || true
+pylint -E vardaa
+pylint -E tests
+nosetests --with-coverage --cover-package=vardaa --exe

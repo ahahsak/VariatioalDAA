@@ -1,7 +1,7 @@
 import numpy as np
-import vbhmm.hmm as hmm
-from vbhmm.hmm import VbHmm
-import vbhmm.util as util
+import vardaa.hmm as hmm
+from vardaa.hmm import VbHmm
+import vardaa.util as util
 from nose.tools import assert_equal, ok_, nottest
 
 
