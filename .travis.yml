@@ -10,6 +10,6 @@ install:
 script:
   - "pylint --disable=C,E vbhmm || true" # report about warnings and refactoring.
   - "pylint -E vbhmm" # detect errors. if detected, the build would be failed
-  - "nosetests --with-coverage --cover-package=vbhmm"
+  - "nosetests --with-coverage --cover-package=vardaa"
 after_success:
   - "coveralls"
