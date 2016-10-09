@@ -3,7 +3,7 @@ from numpy.random import rand, dirichlet, normal, random, randn
 from scipy.cluster import vq
 from scipy.special import gammaln, digamma
 from scipy.linalg import eig, inv, cholesky
-from vbhmm.util import *
+from vardaa.util import *
 
 """
     VB-HMM with Gaussian emission probability.
@@ -13,37 +13,36 @@ from vbhmm.util import *
 
 class VbHmm():
 
-    def __init__(self, N, UPI0=0.5, UA0=0.5, M0=0.0,
-                 BETA0=1, NU0=1, S0=0.01):
+    def __init__(self, n, uPi0=0.5, uA0=0.5, m0=0.0, beta0=1, nu0=1, s0=0.01):
 
-        self.n_states = N
+        self.n_states = n
         # log initial probability
-        self._lnpi = np.log(np.tile(1.0 / N, N))
+        self._lnpi = np.log(np.tile(1.0 / n, n))
         # log transition probability
-        self._lnA = np.log(dirichlet([1.0] * N, N))
+        self._lnA = np.log(dirichlet([1.0] * n, n))
 
         # 事前分布のハイパーパラメータ
-        self._upi = np.ones(N) * UPI0   # 初期状態確率
-        self._ua = np.ones((N, N)) * UA0     # 遷移確率
+        self._upi = np.ones(n) * uPi0   # 初期状態確率
+        self._ua = np.ones((n, n)) * uA0     # 遷移確率
 
         # 事後分布のパラメータ
         self._wpi = np.array(self._upi)  # 初期確率
         self._wa = np.array(self._ua)  # 遷移確率
 
-        self._m0 = M0
-        self._beta0 = BETA0
-        self._nu0 = NU0
-        self._s0 = S0
+        self._m0 = m0
+        self._beta0 = beta0
+        self._nu0 = nu0
+        self._s0 = s0
 
     def _allocate_fb(self, obs):
         # fbアルゴリズムを走らせた時の一時保存用
         T = len(obs)
-        lnalpha = np.zeros((T, self.n_states))  # log forward variable
-        lnbeta = np.zeros((T, self.n_states))  # log backward variable
-        lnxi = np.zeros((T - 1, self.n_states, self.n_states))
-        return lnalpha, lnbeta, lnxi
+        lnAlpha = np.zeros((T, self.n_states))  # log forward variable
+        lnBeta = np.zeros((T, self.n_states))  # log backward variable
+        lnXi = np.zeros((T - 1, self.n_states, self.n_states))
+        return lnAlpha, lnBeta, lnXi
 
-    def _forward(self, lnf, lnalpha):
+    def _forward(self, lnF, lnAlpha):
         """
         Use forward algorith to calculate forward variables and loglikelihood
         input
@@ -53,17 +52,17 @@ class VbHmm():
           lnAlpha [ndarray, shape (n,n_states)] : log forward variable
           lnP [float] : lnP(X|theta)
         """
-        T = len(lnf)
-        lnalpha *= 0.0
-        lnalpha[0, :] = self._lnpi + lnf[0, :]
+        T = len(lnF)
+        lnAlpha *= 0.0
+        lnAlpha[0, :] = self._lnpi + lnF[0, :]
 
         for t in range(1, T):
-            lnalpha[t, :] = logsum(lnalpha[t - 1, :] +
-                                   self._lnA.T, 1) + lnf[t, :]
+            lnAlpha[t, :] = logsum(lnAlpha[t - 1, :] +
+                                   self._lnA.T, 1) + lnF[t, :]
 
-        return lnalpha, logsum(lnalpha[-1, :])
+        return lnAlpha, logsum(lnAlpha[-1, :])
 
-    def _backward(self, lnf, lnbeta):
+    def _backward(self, lnF, lnBeta):
         """
         Use backward algorith to calculate backward variables and loglikelihood
         input
@@ -73,14 +72,14 @@ class VbHmm():
             lnBeta [ndarray, shape (n,n_states)] : log backward variable
             lnP [float] : lnP(X|theta)
         """
-        T = len(lnf)
-        lnbeta[T - 1, :] = 0.0
+        T = len(lnF)
+        lnBeta[T - 1, :] = 0.0
 
         for t in range(T - 2, -1, -1):
-            lnbeta[t, :] = logsum(
-                self._lnA + lnf[t + 1, :] + lnbeta[t + 1, :], 1)
+            lnBeta[t, :] = logsum(
+                self._lnA + lnF[t + 1, :] + lnBeta[t + 1, :], 1)
 
-        return lnbeta, logsum(lnbeta[0, :] + lnf[0, :] + self._lnpi)
+        return lnBeta, logsum(lnBeta[0, :] + lnF[0, :] + self._lnpi)
 
     def _initialize_vbhmm(self, obs, scale=10.0):
         n_states = self.n_states
@@ -113,19 +112,19 @@ class VbHmm():
     def _log_like_f(self, obs):
         return log_like_gauss(obs, self._nu, self._v, self._beta, self._m)
 
-    def _calculate_sufficient_statistics(self, obs, lnxi, lngamma):
+    def _calculate_sufficient_statistics(self, obs, lnXi, lnGamma):
         # z[n,k] = Q(zn=k)
         nmix = self.n_states
         t, d = obs.shape
-        self.z = np.exp(np.vstack(lngamma))
-        self.z0 = np.exp([lg[0] for lg in lngamma]).sum(0)
+        self.z = np.exp(np.vstack(lnGamma))
+        self.z0 = np.exp([lg[0] for lg in lnGamma]).sum(0)
         self._n = self.z.sum(0)
         self._xbar = np.dot(self.z.T, obs) / self._n[:, np.newaxis]
         for k in range(nmix):
             d_obs = obs - self._xbar[k]
             self._c[k] = np.dot((self.z[:, k] * d_obs.T), d_obs)
 
-    def _update_parameters(self, obs, lnxi, lngamma):
+    def _update_parameters(self, obs, lnXi, lnGamma):
         nmix = self.n_states
         t, d = obs.shape
         # update parameters of initial prob
@@ -133,7 +132,7 @@ class VbHmm():
         self._lnpi = digamma(self._wpi) - digamma(self._wpi.sum())
 
         # update parameters of transition prob
-        self._wa = self._ua + np.exp(lnxi).sum()
+        self._wa = self._ua + np.exp(lnXi).sum()
         self._lnA = digamma(self._wa) - digamma(self._wa)
 
         for k in range(nmix):
@@ -185,7 +184,7 @@ class VbHmm():
 
         return self.pi, self.A, self.mu, self.cv
 
-    def _e_step(self, lnf, lnalpha, lnbeta, lnxi):
+    def _e_step(self, lnF, lnAlpha, lnBeta, lnXi):
         """
         lnF [ndarray, shape (n,n_states)] : loglikelihood of emissions
         lnAlpha [ndarray, shape (n, n_states]: log forward message
@@ -193,10 +192,10 @@ class VbHmm():
         lnPx_f: log sum of p(x_n) by forward message for scalling
         lnPx_b: log sum of p(x_n) by backward message for scalling
         """
-        T = len(lnf)
+        T = len(lnF)
         # forward-backward algorithm
-        lnalpha, lnpx_f = self._forward(lnf, lnalpha)
-        lnbeta, lnpx_b = self._backward(lnf, lnbeta)
+        lnAlpha, lnpx_f = self._forward(lnF, lnAlpha)
+        lnBeta, lnpx_b = self._backward(lnF, lnBeta)
 
         # check if forward and backward were done correctly
         dlnp = lnpx_f - lnpx_b
@@ -207,18 +206,18 @@ class VbHmm():
         for i in range(self.n_states):
             for j in range(self.n_states):
                 for t in range(T - 1):
-                    lnxi[t, i, j] = lnalpha[t, i] + self._lnA[i, j, ] + \
-                        lnf[t + 1, j] + lnbeta[t + 1, j]
-        lnxi -= lnpx_f
+                    lnXi[t, i, j] = lnAlpha[t, i] + self._lnA[i, j, ] + \
+                        lnF[t + 1, j] + lnBeta[t + 1, j]
+        lnXi -= lnpx_f
 
         # compute lnGamma for postetior on hidden states
-        lngamma = lnalpha + lnbeta - lnpx_f
+        lnGamma = lnAlpha + lnBeta - lnpx_f
 
-        return lnxi, lngamma, lnpx_f
+        return lnXi, lnGamma, lnpx_f
 
-    def _m_step(self, obs, lnxi, lngamma):
-        self._calculate_sufficient_statistics(obs, lnxi, lngamma)
-        self._update_parameters(obs, lnxi, lngamma)
+    def _m_step(self, obs, lnXi, lnGamma):
+        self._calculate_sufficient_statistics(obs, lnXi, lnGamma)
+        self._update_parameters(obs, lnXi, lnGamma)
 
     def _eval_hidden_states(self, obs):
         """
@@ -226,10 +225,10 @@ class VbHmm():
         Then obtain variational free energy and posterior over hidden states
         """
 
-        lnf = self._log_like_f(obs)
-        lnalpha, lnbeta, lnxi = self._allocate_fb(obs)
-        lnxi, lngamma, lnp = self._e_step(lnf, lnalpha, lnbeta, lnxi)
-        z = np.exp(lngamma)
+        lnF = self._log_like_f(obs)
+        lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
+        lnXi, lnGamma, lnp = self._e_step(lnF, lnAlpha, lnBeta, lnXi)
+        z = np.exp(lnGamma)
         return z, lnp
 
     def score(self, obs):
@@ -245,42 +244,42 @@ class VbHmm():
         f = -lnp + self._kl_div()
         return f
 
-    def fit(self, obs, N_ITER=10000, EPS=1.0e-4,
-            IFREQ=10, OLD_F=1.0e20, INIT=True):
+    def fit(self, obs, n_iter=10000, eps=1.0e-4,
+            ifreq=10, old_f=1.0e20, init=True):
         '''Fit the HMM via VB-EM algorithm'''
-        if INIT:
+        if init:
             self._initialize_vbhmm(obs)
-            OLD_F = 1.0e20
-            lnalpha, lnbeta, lnxi = self._allocate_fb(obs)
+            old_f = 1.0e20
+            lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
 
-        for i in range(N_ITER):
+        for i in range(n_iter):
             # VB-E step
-            lnf = self._log_like_f(obs)
-            lnxi, lngamma, lnp = self._e_step(lnf, lnalpha, lnbeta, lnxi)
+            lnF = self._log_like_f(obs)
+            lnXi, lnGamma, lnp = self._e_step(lnF, lnAlpha, lnBeta, lnXi)
 
             # check convergence
             kl = self._kl_div()
             f = -lnp + kl
-            df = f - OLD_F
-            if(abs(df) < EPS):
+            df = f - old_f
+            if(abs(df) < eps):
                 print("%8dth iter, Free Energy = %12.6e, dF = %12.6e" %
                       (i, f, df))
-                print("%12.6e < %12.6e Converged" % (df, EPS))
+                print("%12.6e < %12.6e Converged" % (df, eps))
                 break
-            if i % IFREQ == 0 and df < 0.0:
+            if i % ifreq == 0 and df < 0.0:
                 print("% 6dth iter, F = % 15.8e  df = % 15.8e" % (i, f, df))
             elif df >= 0.0:
                 print("% 6dth iter, F = % 15.8e  df = % 15.8e warning" %
                       (i, f, df))
 
-            OLD_F = f
-            print(OLD_F)
+            old_f = f
+            print(old_f)
 
             # update parameters via VB-M step
-            self._m_step(obs, lnxi, lngamma)
+            self._m_step(obs, lnXi, lnGamma)
 
-    def show_model(self, SHOW_PI=True, SHOW_A=True, SHOW_MU=False,
-                   SHOW_CV=False, EPS=1.0e-2):
+    def show_model(self, show_pi=True, show_a=True, show_mu=False,
+                   show_cv=False, eps=1.0e-2):
         """
         return parameters of relavent clusters
         """
@@ -288,7 +287,7 @@ class VbHmm():
         ids = []
         sorted_ids = (-self.pi).argsort()
         for k in sorted_ids:
-            if self.pi[k] > EPS:
+            if self.pi[k] > eps:
                 ids.append(k)
         pi = self.pi[ids]
         mu = self.mu[ids]
@@ -298,13 +297,13 @@ class VbHmm():
             i = ids[k]
             print("\n%dth component, pi = %8.3g" % (k, pi[i]))
             print("cluster id =", i)
-        if SHOW_PI:
+        if show_pi:
             print("pi = ", pi)
-        if SHOW_A:
+        if show_a:
             print("A = ", A)
-        if SHOW_MU:
+        if show_mu:
             print("mu =", mu[i])
-        if SHOW_CV:
+        if show_cv:
             print("cv =", cv[i])
 
         return ids, pi, A, mu, cv
