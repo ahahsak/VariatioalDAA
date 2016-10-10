@@ -69,10 +69,10 @@ def lnz_wishart(nu, V):
       V [ndarray, shape (D x D)] : base matrix of Wishart distribution
       note <CovMat> = V/nu
     """
-    '''
-    if nu < len(V) + 1:
-        raise ValueError("dof parameter nu must larger than len(V)")
-    '''
+    
+    # if nu < len(V) + 1:
+    #     raise ValueError("dof parameter nu must larger than len(V)")
+    
     D = len(V)
     lnZ = 0.5 * nu * (D * np.log(2.0) - np.log(det(V))) \
         + gammaln(np.arange(nu + 1 - D, nu + 1) * 0.5).sum()
@@ -126,27 +126,24 @@ def kl_wishart(nu1, V1, nu2, V2):
     """
     KL-div of Wishart distribution KL[q(nu1,V1)||p(nu2,V2)]
     """
-    '''
-    if nu1 < len(V1) + 1:
-        raise ValueError("dof parameter nu1 must larger than len(V1)")
-    if nu2 < len(V2) + 1:
-        raise ValueError("dof parameter nu2 must larger than len(V2)")
 
-    if len(V1) != len(V2):
-        raise ValueError("dimension of two matrix dont match, %d and %d" % (
-            len(V1), len(V2)))
-    '''
+    # if nu1 < len(V1) + 1:
+    #     raise ValueError("dof parameter nu1 must larger than len(V1)")
+    # if nu2 < len(V2) + 1:
+    #     raise ValueError("dof parameter nu2 must larger than len(V2)")
+
+    # if len(V1) != len(V2):
+    #     raise ValueError("dimension of two matrix dont match, %d and %d" % (
+    #         len(V1), len(V2)))
 
     D = len(V1)
     kl = 0.5 * ((nu1 - nu2) * e_lndetw_wishart(nu1, V1) + nu1 *
                 (np.trace(solve(V1, V2)) - D)) - lnz_wishart(nu1, V1)
     + lnz_wishart(nu2, V2)
 
-    '''
-    if KL < _small_negative_number:
-        print(nu1, nu2, V1, V2)
-        raise ValueError("KL must be larger than 0")
-    '''
+    # if KL < _small_negative_number:
+    #     print(nu1, nu2, V1, V2)
+    #     raise ValueError("KL must be larger than 0")
     return kl
 
 
@@ -169,10 +166,10 @@ def kl_gauss_wishart(nu1, V1, beta1, m1, nu2, V2, beta2, m2):
                                                   solve(V1, (m1 - m2))))
 
     kl = kl1 + kl2
-    '''
-    if KL < _small_negative_number:
-        raise ValueError("KL must be larger than 0")
-    '''
+
+    # if KL < _small_negative_number:
+    #     raise ValueError("KL must be larger than 0")
+
     return kl
 
 
