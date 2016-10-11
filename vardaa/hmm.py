@@ -3,7 +3,8 @@ from numpy.random import rand, dirichlet, normal, random, randn
 from scipy.cluster import vq
 from scipy.special import gammaln, digamma
 from scipy.linalg import eig, inv, cholesky
-from vardaa.util import *
+from vardaa.util import logsum, log_like_gauss, kl_dirichlet, kl_gauss_wishart, normalize, sample_gaussian
+
 
 
 class VbHmm():
@@ -84,7 +85,7 @@ class VbHmm():
         n_states = self.n_states
 
         T, D = obs.shape
-        self.mu, temp = vq.kmeans2(obs, n_states)
+        self.mu, _ = vq.kmeans2(obs, n_states)
         self.cv = np.tile(np.identity(D), (n_states, 1, 1))
 
         if self._nu0 < D:
@@ -99,7 +100,7 @@ class VbHmm():
         # posterior for hidden states
         self.z = dirichlet(np.tile(1.0 / n_states, n_states), T)
         # for mean vector
-        self._m, temp = vq.kmeans2(obs, n_states, minit='points')
+        self._m, _ = vq.kmeans2(obs, n_states, minit='points')
         self._beta = np.tile(self._beta0, n_states)
         # for covarience matrix
         self._v = np.tile(np.array(self._v0), (n_states, 1, 1))
