@@ -6,7 +6,6 @@ from scipy.linalg import eig, inv, cholesky
 from vardaa.util import logsum, log_like_gauss, kl_dirichlet, kl_gauss_wishart, normalize, sample_gaussian
 
 
-
 class VbHmm():
     """
     VB-HMM with Gaussian emission probability.
@@ -167,23 +166,6 @@ class VbHmm():
         kl += kl_pi + kl_A + kl_g
         return kl
 
-    def _get_expectations(self):
-        """
-        Calculate expectations of parameters over posterior distribution
-        """
-        self.A = self._wa / self._wa.sum(1)[:, np.newaxis]
-        # <pi_k>_Q(pi_k)
-        self.ev = eig(self.A.T)
-        self.pi = normalize(np.abs(self.ev[1][:, self.ev[0].argmax()]))
-
-        # <mu_k>_Q(mu_k,W_k)
-        self.mu = np.array(self._m)
-
-        # inv(<W_k>_Q(W_k))
-        self.cv = self._v / self._nu[:, np.newaxis, np.newaxis]
-
-        return self.pi, self.A, self.mu, self.cv
-
     def _e_step(self, lnF, lnAlpha, lnBeta, lnXi):
         """
         lnF [ndarray, shape (n,n_states)] : loglikelihood of emissions
@@ -231,19 +213,6 @@ class VbHmm():
         z = np.exp(lnGamma)
         return z, lnp
 
-    def score(self, obs):
-        """
-        score the model
-            input
-              obs [ndarray, shape(nobs,ndim)] : observed data
-            output
-              F [float] : variational free energy of the model
-        """
-        n_obs = obs.shape
-        z, lnp = self._eval_hidden_states(obs)
-        f = -lnp + self._kl_div()
-        return f
-
     def fit(self, obs, n_iter=10000, eps=1.0e-4,
             ifreq=10, old_f=1.0e20, init=True):
         '''Fit the HMM via VB-EM algorithm'''
@@ -277,43 +246,6 @@ class VbHmm():
 
             # update parameters via VB-M step
             self._m_step(obs, lnXi, lnGamma)
-
-    def show_model(self, show_pi=True, show_a=True, show_mu=False,
-                   show_cv=False, eps=1.0e-2):
-        """
-        return parameters of relavent clusters
-        """
-        self._get_expectations()
-        ids = []
-        sorted_ids = (-self.pi).argsort()
-        for k in sorted_ids:
-            if self.pi[k] > eps:
-                ids.append(k)
-        pi = self.pi[ids]
-        mu = self.mu[ids]
-        cv = self.cv[ids]
-        A = np.array([AA[ids] for AA in self.A[ids]])
-        for k in range(len(ids)):
-            i = ids[k]
-            print("\n%dth component, pi = %8.3g" % (k, pi[i]))
-            print("cluster id =", i)
-        if show_pi:
-            print("pi = ", pi)
-        if show_a:
-            print("A = ", A)
-        if show_mu:
-            print("mu =", mu[i])
-        if show_cv:
-            print("cv =", cv[i])
-
-        return ids, pi, A, mu, cv
-
-    def decode(self, obs):
-        """
-        Get the most probable cluster id
-        """
-        z, lnp = self._eval_hidden_states(obs)
-        return z.argmax(1)
 
     def simulate(self, T, mu, cv):
         n, d = mu.shape
