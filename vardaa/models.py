@@ -43,7 +43,7 @@ class Model():
         Get the most probable cluster id
         """
         return z.argmax(1)
-
+    '''
     def score(self, kl):
         """
         score the model
@@ -56,6 +56,7 @@ class Model():
         z, lnp = _eval_hidden_states(obs)
         f = -lnp + kl
         return f
+    '''
 
     def _get_expectations(self, pi, A, mu, cv):
         """
