@@ -12,7 +12,7 @@ class VbHmm():
     VB-E step is Forward-Backward Algorithm.
     """
 
-    def __init__(self, n, uPi0=0.5, uA0=0.5, m0=0.0, beta0=1, nu0=1, s0=0.01):
+    def __init__(self, n, uPi0=0.5, uA0=0.5, m0=0.0, beta0=1, nu0=1):
 
         self.n_states = n
         # log initial probability
@@ -31,7 +31,6 @@ class VbHmm():
         self._m0 = m0
         self._beta0 = beta0
         self._nu0 = nu0
-        self._s0 = s0
 
     def _allocate_fb(self, obs):
         # fbアルゴリズムを走らせた時の一時保存用
@@ -213,8 +212,7 @@ class VbHmm():
         z = np.exp(lnGamma)
         return z, lnp
 
-    def fit(self, obs, n_iter=10000, eps=1.0e-4,
-            ifreq=10, old_f=1.0e20, init=True):
+    def fit(self, obs, n_iter, eps, ifreq, old_f, init):
         '''Fit the HMM via VB-EM algorithm'''
         if init:
             self._initialize_vbhmm(obs)
@@ -247,17 +245,17 @@ class VbHmm():
             # update parameters via VB-M step
             self._m_step(obs, lnXi, lnGamma)
 
-    def simulate(self, T, mu, cv):
+    def generate_obs_gauss(self, T, mu, cv):
         n, d = mu.shape
 
         pi_cdf = np.exp(self._lnpi).cumsum()
         A_cdf = np.exp(self._lnA).cumsum(1)
-        z = np.zeros(T, dtype=np.int)
-        o = np.zeros((T, d))
+        states_seq = np.zeros(T, dtype=np.int)
+        data = np.zeros((T, d))
         r = random(T)
-        z[0] = (pi_cdf > r[0]).argmax()
-        o[0] = sample_gaussian(mu[z[0]], cv[z[0]])
+        states_seq[0] = (pi_cdf > r[0]).argmax()
+        data[0] = sample_gaussian(mu[states_seq[0]], cv[states_seq[0]])
         for t in range(1, T):
-            z[t] = (A_cdf[z[t - 1]] > r[t]).argmax()
-            o[t] = sample_gaussian(mu[z[t]], cv[z[t]])
-        return z, o
+            states_seq[t] = (A_cdf[states_seq[t - 1]] > r[t]).argmax()
+            data[t] = sample_gaussian(mu[states_seq[t]], cv[states_seq[t]])
+        return states_seq, data
