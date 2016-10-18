@@ -2,36 +2,38 @@ import numpy as np
 import vardaa.hmm as hmm
 from vardaa.hmm import VbHmm
 import vardaa.models as models
-from vardaa.models import HMM
+from vardaa.models import Model
 import vardaa.util as util
 from nose.tools import assert_equal, ok_, nottest
 
 
 @nottest
-def fit_vb_art():
-    model = HMM(3)
-    mu = np.array([[3.0, 3.0], [0.0, 0.0], [-4.0, 0.0]])
-    cv = np.tile(np.identity(2), (3, 1, 1))
-    model.fit_vb_art(50 * 10, mu, cv)
-
-
-@nottest
 def test_show():
-    model = HMM(3)
+    model = VbHmm(3)
     mu = np.array([[3.0, 3.0], [0.0, 0.0], [-4.0, 0.0]])
     cv = np.tile(np.identity(2), (3, 1, 1))
-    state_seq, obs_data = VbHmm.generate_obs_gauss(50 * 10, mu, cv)
-    model._vb_em(obs_data)
-    model.show()
+    # model.lnA = np.log([[0.9, 0.05, 0.05], [0.1, 0.7, 0.2], [0.1, 0.4, 0.5]])
+    z, o2 = model.simulate(50 * 10, mu, cv)
+    model.fit(o2)
+    result = Model(model.pi, model.A, model.mu, model.cv,
+                   model._wa, model._nu, model._v, model._m)
+    # z2 = model.decode(o2)
+    # model.show_model(True, True, True, True)
+    result.show()
 
 
 @nottest
 def test_decode():
-    model = HMM(3)
+    model = VbHmm(3)
     mu = np.array([[3.0, 3.0], [0.0, 0.0], [-4.0, 0.0]])
     cv = np.tile(np.identity(2), (3, 1, 1))
-    state_seq, obs_data = VbHmm.generate_obs_gauss(50 * 10, mu, cv)
-    model.decode(obs_data)
+    # model.lnA = np.log([[0.9, 0.05, 0.05], [0.1, 0.7, 0.2], [0.1, 0.4, 0.5]])
+    z, o2 = model.simulate(50 * 10, mu, cv)
+    model.fit(o2)
+    result = Model(model.pi, model.A, model.mu, model.cv,
+                   model._wa, model._nu, model._v, model._m)
+    codes = result.decode(model.z)
+    pass
 
 
 @nottest

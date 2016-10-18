@@ -4,18 +4,17 @@ from vardaa.util import normalize
 from scipy.linalg import eig
 
 
-class HMM(VbHmm):
+class Model():
 
-    def __init__(self, n):
-        VbHmm.__init__(self, n)
-
-    def fit_vb_art(self, T, mu, cv):
-        states_art, obs = VbHmm.generate_obs_gauss(self, T, mu, cv)
-        self._vb_em(obs)
-
-    def _vb_em(self, obs, n_iter=10000, eps=1.0e-4,
-               ifreq=10, old_f=1.0e20, init=True):
-        return VbHmm.fit(self, obs, n_iter, eps, ifreq, old_f, init)
+    def __init__(self, _pi, _A, _mu, _cv, _wa, _nu, _v, _m):
+        self.pi = _pi
+        self.A = _A
+        self.mu = _mu
+        self.cv = _cv
+        self.wa = _wa
+        self.nu = _nu
+        self.v = _v
+        self.m = _m
 
     def show(self, eps=1.0e-2):
         """
@@ -39,14 +38,14 @@ class HMM(VbHmm):
         '''
         return ids, pi, A, mu, cv
 
-    def decode(self, obs):
+    def decode(self, z):
         """
         Get the most probable cluster id
         """
-        z, lnp = VbHmm._eval_hidden_states(self, obs)
         return z.argmax(1)
 
-    def score(self, obs):
+    '''
+    def score(self, aa):
         """
         score the model
             input
@@ -54,27 +53,25 @@ class HMM(VbHmm):
             output
               F [float] : variational free energy of the model
         """
-        n_obs = obs.shape
-        z, lnp = VbHmm._eval_hidden_states(obs)
+        # n_obs = obs.shape
+        z, lnp = VbHmm._eval_hidden_states(aa)
         f = -lnp + VbHmm._kl_div()
         return f
+    '''
 
     def _get_expectations(self, pi, A, mu, cv):
         """
         Calculate expectations of parameters over posterior distribution
         """
-        A = self._wa / self._wa.sum(1)[:, np.newaxis]
+        A = self.wa / self.wa.sum(1)[:, np.newaxis]
         # <pi_k>_Q(pi_k)
         ev = eig(A.T)
         pi = normalize(np.abs(ev[1][:, ev[0].argmax()]))
 
         # <mu_k>_Q(mu_k,W_k)
-        mu = np.array(self._m)
+        mu = np.array(self.m)
 
         # inv(<W_k>_Q(W_k))
-        cv = self._v / self._nu[:, np.newaxis, np.newaxis]
+        cv = self.v / self.nu[:, np.newaxis, np.newaxis]
 
         return pi, A, mu, cv
-
-    def plot():
-        pass
