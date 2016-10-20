@@ -41,7 +41,7 @@ class Model():
         return z.argmax(1)
 
     '''
-    def score(self, aa):
+    def score(self, obs):
         """
         score the model
             input
@@ -50,7 +50,7 @@ class Model():
               F [float] : variational free energy of the model
         """
         # n_obs = obs.shape
-        z, lnp = VbHmm._eval_hidden_states(aa)
+        z, lnp = self._eval_hidden_states(obs)
         f = -lnp + VbHmm._kl_div()
         return f
     '''

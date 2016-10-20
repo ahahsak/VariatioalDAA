@@ -201,18 +201,6 @@ class VbHmm():
         self._calculate_sufficient_statistics(obs, lnXi, lnGamma)
         self._update_parameters(obs, lnXi, lnGamma)
 
-    def _eval_hidden_states(self, obs):
-        """
-        Performe one Estep.
-        Then obtain variational free energy and posterior over hidden states
-        """
-
-        lnF = self._log_like_f(obs)
-        lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
-        lnXi, lnGamma, lnp = self._e_step(lnF, lnAlpha, lnBeta, lnXi)
-        z = np.exp(lnGamma)
-        return z, lnp
-
     def fit(self, obs, n_iter=10000, eps=1.0e-4,
             ifreq=10, old_f=1.0e20, init=True):
         '''Fit the HMM via VB-EM algorithm'''
@@ -261,3 +249,17 @@ class VbHmm():
             z[t] = (A_cdf[z[t - 1]] > r[t]).argmax()
             o[t] = sample_gaussian(mu[z[t]], cv[z[t]])
         return z, o
+
+    '''
+    def _eval_hidden_states(self, obs):
+        """
+        Performe one Estep.
+        Then obtain variational free energy and posterior over hidden states
+        """
+
+        lnF = self._log_like_f(obs)
+        lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
+        lnXi, lnGamma, lnp = self._e_step(lnF, lnAlpha, lnBeta, lnXi)
+        z = np.exp(lnGamma)
+        return z, lnp
+    '''

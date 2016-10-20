@@ -28,12 +28,19 @@ def test_decode():
     model.fit(o2)
     result = Model(model._wa, model._nu, model._v, model._m)
     codes = result.decode(model.z)
-    pass
 
-
-@nottest
+'''
 def test_score():
-    pass
+    model = VbHmm(3)
+    mu = np.array([[3.0, 3.0], [0.0, 0.0], [-4.0, 0.0]])
+    cv = np.tile(np.identity(2), (3, 1, 1))
+    model.lnA = np.log(
+        [[0.9, 0.01, 0.09], [0.09, 0.9, 0.01], [0.09, 0.01, 0.9]])
+    z, o2 = model.simulate(50 * 10, mu, cv)
+    model.fit(o2)
+    result = Model(model._wa, model._nu, model._v, model._m)
+    result.score(o2)
+'''
 
 
 @nottest
