@@ -6,11 +6,7 @@ from scipy.linalg import eig
 
 class Model():
 
-    def __init__(self, _pi, _A, _mu, _cv, _wa, _nu, _v, _m):
-        self.pi = _pi
-        self.A = _A
-        self.mu = _mu
-        self.cv = _cv
+    def __init__(self, _wa, _nu, _v, _m):
         self.wa = _wa
         self.nu = _nu
         self.v = _v
@@ -20,16 +16,16 @@ class Model():
         """
         return parameters of relavent clusters
         """
-        self._get_expectations(self.pi, self.A, self.mu, self.cv)
+        pi, A, mu, cv = self._get_expectations()
         ids = []
-        sorted_ids = (-self.pi).argsort()
+        sorted_ids = (-pi).argsort()
         for k in sorted_ids:
-            if self.pi[k] > eps:
+            if pi[k] > eps:
                 ids.append(k)
-        pi = self.pi[ids]
-        mu = self.mu[ids]
-        cv = self.cv[ids]
-        A = np.array([AA[ids] for AA in self.A[ids]])
+        pi = pi[ids]
+        mu = mu[ids]
+        cv = cv[ids]
+        A = np.array([AA[ids] for AA in A[ids]])
         '''
         for k in range(len(ids)):
             i = ids[k]
@@ -59,7 +55,7 @@ class Model():
         return f
     '''
 
-    def _get_expectations(self, pi, A, mu, cv):
+    def _get_expectations(self):
         """
         Calculate expectations of parameters over posterior distribution
         """
