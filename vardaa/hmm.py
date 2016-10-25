@@ -3,7 +3,7 @@ from numpy.random import rand, dirichlet, normal, random, randn
 from scipy.cluster import vq
 from scipy.special import gammaln, digamma
 from scipy.linalg import eig, inv, cholesky
-from vardaa.util import logsum, log_like_gauss, kl_dirichlet, kl_gauss_wishart, normalize, sample_gaussian
+from vardaa.util import logsum, log_like_gauss, kl_dirichlet, kl_gauss_wishart, normalize, sample_gaussian, e_lnpi_dirichlet
 
 
 class VbHmm():
@@ -128,15 +128,14 @@ class VbHmm():
         t, d = obs.shape
         # update parameters of initial prob
         self._wpi = self._upi + self.z0
-        self._lnpi = digamma(self._wpi) - digamma(self._wpi.sum())
+        self._lnpi = e_lnpi_dirichlet(self._wpi)
 
         # update parameters of transition prob
         self._wa = self._ua + np.exp(lnXi).sum()
         self._lnA = digamma(self._wa) - digamma(self._wa)
 
         for k in range(nmix):
-            self._lnA[k, :] = digamma(
-                self._wa[k, :]) - digamma(self._wa[k, :].sum())
+            self._lnA[k, :] = e_lnpi_dirichlet(self._wa[k, :])
 
         self._beta = self._beta0 + self._n
         self._nu = self._nu0 + self._n
@@ -185,17 +184,21 @@ class VbHmm():
             print("warning forward and backward are not equivalent")
 
         # compute lnXi for updating transition matrix
-        for i in range(self.n_states):
-            for j in range(self.n_states):
-                for t in range(T - 1):
-                    lnXi[t, i, j] = lnAlpha[t, i] + self._lnA[i, j, ] + \
-                        lnF[t + 1, j] + lnBeta[t + 1, j]
+        lnXi = self._calculate_lnXi(lnAlpha, lnBeta, lnF)
         lnXi -= lnpx_f
 
         # compute lnGamma for postetior on hidden states
         lnGamma = lnAlpha + lnBeta - lnpx_f
 
         return lnXi, lnGamma, lnpx_f
+
+    def _calculate_lnXi(self, lnAlpha, lnBeta, lnF):
+        for i in range(self.n_states):
+            for j in range(self.n_states):
+                for t in range(T - 1):
+                    lnXi[t, i, j] = lnAlpha[t, i] + self._lnA[i, j, ] + \
+                        lnF[t + 1, j] + lnBeta[t + 1, j]
+        return lnXi
 
     def _m_step(self, obs, lnXi, lnGamma):
         self._calculate_sufficient_statistics(obs, lnXi, lnGamma)
