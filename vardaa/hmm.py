@@ -20,13 +20,13 @@ class VbHmm():
         # log transition probability
         self._lnA = np.log(dirichlet([1.0] * n, n))
 
-        # 事前分布のハイパーパラメータ
-        self._upi = np.ones(n) * uPi0   # 初期状態確率
-        self._ua = np.ones((n, n)) * uA0     # 遷移確率
+        # prior parameter
+        self._upi = np.ones(n) * uPi0   # first states prob
+        self._ua = np.ones((n, n)) * uA0     # trans prob
 
-        # 事後分布のパラメータ
-        self._wpi = np.array(self._upi)  # 初期確率
-        self._wa = np.array(self._ua)  # 遷移確率
+        # posterior parameter
+        self._wpi = np.array(self._upi)  # first states prob
+        self._wa = np.array(self._ua)  # trans prob
 
         self._m0 = m0
         self._beta0 = beta0
@@ -93,8 +93,8 @@ class VbHmm():
         self._m0 = np.mean(obs, 0)
         self._v0 = np.atleast_2d(np.cov(obs.T)) * scale
 
-        self.A = dirichlet([1.0] * n_states, n_states)   # A:状態遷移行列
-        self.pi = np.tile(1.0 / n_states, n_states)  # pi:初期状態確率
+        self.A = dirichlet([1.0] * n_states, n_states)   # trans matrix
+        self.pi = np.tile(1.0 / n_states, n_states)  # first state matrix
 
         # posterior for hidden states
         self.z = dirichlet(np.tile(1.0 / n_states, n_states), T)
@@ -202,12 +202,11 @@ class VbHmm():
         self._update_parameters(obs, lnXi, lnGamma)
 
     def fit(self, obs, n_iter=10000, eps=1.0e-4,
-            ifreq=10, old_f=1.0e20, init=True):
+            ifreq=10, old_f=1.0e20):
         '''Fit the HMM via VB-EM algorithm'''
-        if init:
-            self._initialize_vbhmm(obs)
-            old_f = 1.0e20
-            lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
+        self._initialize_vbhmm(obs)
+        old_f = 1.0e20
+        lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
 
         for i in range(n_iter):
             # VB-E step
