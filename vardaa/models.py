@@ -6,26 +6,27 @@ from scipy.linalg import eig
 
 class Model():
 
-    def __init__(self, _wa, _nu, _v, _m):
-        self.wa = _wa
-        self.nu = _nu
-        self.v = _v
-        self.m = _m
+    def __init__(self, wa, nu, v, m):
+        pi, A, mu, cv = Model._get_expectations(wa, nu, v, m)
+
+        self.pi = pi
+        self.A = A
+        self.mu = mu
+        self.cv = cv
 
     def show(self, eps=1.0e-2):
         """
         return parameters of relavent clusters
         """
-        pi, A, mu, cv = self._get_expectations()
         ids = []
-        sorted_ids = (-pi).argsort()
+        sorted_ids = (-self.pi).argsort()
         for k in sorted_ids:
-            if pi[k] > eps:
+            if self.pi[k] > eps:
                 ids.append(k)
-        pi = pi[ids]
-        mu = mu[ids]
-        cv = cv[ids]
-        A = np.array([AA[ids] for AA in A[ids]])
+        pi = self.pi[ids]
+        mu = self.mu[ids]
+        cv = self.cv[ids]
+        A = np.array([AA[ids] for AA in self.A[ids]])
         '''
         for k in range(len(ids)):
             i = ids[k]
@@ -55,19 +56,20 @@ class Model():
         return f
     '''
 
-    def _get_expectations(self):
+    @staticmethod
+    def _get_expectations(wa, nu, v, m):
         """
         Calculate expectations of parameters over posterior distribution
         """
-        A = self.wa / self.wa.sum(1)[:, np.newaxis]
+        A = wa / wa.sum(1)[:, np.newaxis]
         # <pi_k>_Q(pi_k)
         ev = eig(A.T)
         pi = normalize(np.abs(ev[1][:, ev[0].argmax()]))
 
         # <mu_k>_Q(mu_k,W_k)
-        mu = np.array(self.m)
+        mu = np.array(m)
 
         # inv(<W_k>_Q(W_k))
-        cv = self.v / self.nu[:, np.newaxis, np.newaxis]
+        cv = v / nu[:, np.newaxis, np.newaxis]
 
         return pi, A, mu, cv
