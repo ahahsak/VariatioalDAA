@@ -122,6 +122,10 @@ def e_lndetw_wishart(nu, V):
     return E
 
 
+def e_lnpi_dirichlet(alpha):
+    return digamma(alpha) - digamma(alpha.sum())
+
+
 def kl_wishart(nu1, V1, nu2, V2):
     """
     KL-div of Wishart distribution KL[q(nu1,V1)||p(nu2,V2)]
