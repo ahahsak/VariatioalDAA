@@ -173,7 +173,6 @@ class VbHmm():
         lnPx_f: log sum of p(x_n) by forward message for scalling
         lnPx_b: log sum of p(x_n) by backward message for scalling
         """
-        T = len(lnF)
         # forward-backward algorithm
         lnAlpha, lnpx_f = self._forward(lnF, lnAlpha)
         lnBeta, lnpx_b = self._backward(lnF, lnBeta)
@@ -184,7 +183,7 @@ class VbHmm():
             print("warning forward and backward are not equivalent")
 
         # compute lnXi for updating transition matrix
-        lnXi = self._calculate_lnXi(lnAlpha, lnBeta, lnF)
+        lnXi = self._calculate_lnXi(lnXi, lnAlpha, lnBeta, lnF)
         lnXi -= lnpx_f
 
         # compute lnGamma for postetior on hidden states
@@ -192,7 +191,8 @@ class VbHmm():
 
         return lnXi, lnGamma, lnpx_f
 
-    def _calculate_lnXi(self, lnAlpha, lnBeta, lnF):
+    def _calculate_lnXi(self, lnXi, lnAlpha, lnBeta, lnF):
+        T = len(lnF)
         for i in range(self.n_states):
             for j in range(self.n_states):
                 for t in range(T - 1):
