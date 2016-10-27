@@ -13,7 +13,7 @@ def test_show():
     model.lnA = lnA
     z, o2 = model.simulate(50 * 10, mu, cv)
     model.fit(o2)
-    result = Model(model._wa, model._nu, model._v, model._m)
+    result = Model(model._wa, model._nu, model._W, model._m)
     result.show()
 
 
@@ -23,7 +23,7 @@ def test_decode():
     model.lnA = lnA
     z, o2 = model.simulate(50 * 10, mu, cv)
     model.fit(o2)
-    result = Model(model._wa, model._nu, model._v, model._m)
+    result = Model(model._wa, model._nu, model._W, model._m)
     codes = result.decode(model.z)
 
 
