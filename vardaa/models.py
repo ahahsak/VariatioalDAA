@@ -6,8 +6,8 @@ from scipy.linalg import eig
 
 class Model():
 
-    def __init__(self, wa, nu, v, m):
-        pi, A, mu, cv = Model._get_expectations(wa, nu, v, m)
+    def __init__(self, wa, nu, W, m):
+        pi, A, mu, cv = Model._get_expectations(wa, nu, W, m)
 
         self.pi = pi
         self.A = A
@@ -57,7 +57,7 @@ class Model():
     '''
 
     @staticmethod
-    def _get_expectations(wa, nu, v, m):
+    def _get_expectations(wa, nu, W, m):
         """
         Calculate expectations of parameters over posterior distribution
         """
@@ -70,6 +70,6 @@ class Model():
         mu = np.array(m)
 
         # inv(<W_k>_Q(W_k))
-        cv = v / nu[:, np.newaxis, np.newaxis]
+        cv = W / nu[:, np.newaxis, np.newaxis]
 
         return pi, A, mu, cv
