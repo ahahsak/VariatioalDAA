@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import stats
 from scipy.special import gammaln, digamma
 from scipy.linalg import eig, det, solve, inv, cholesky
 from scipy.spatial.distance import cdist
@@ -61,7 +62,7 @@ def lnz_dirichlet(alpha):
     return Z
 
 
-def lnz_wishart(nu, V):
+def lnz_wishart(nu, W):
     """
     log normalization constant of Wishart distribution
     input
@@ -73,14 +74,14 @@ def lnz_wishart(nu, V):
     # if nu < len(V) + 1:
     #     raise ValueError("dof parameter nu must larger than len(V)")
 
-    D = len(V)
-    lnZ = 0.5 * nu * (D * np.log(2.0) - np.log(det(V))) \
+    D = len(W)
+    lnZ = 0.5 * nu * (D * np.log(2.0) - np.log(det(W))) \
         + gammaln(np.arange(nu + 1 - D, nu + 1) * 0.5).sum()
 
     return lnZ
 
 
-def log_like_gauss(obs, nu, V, beta, m):
+def log_like_gauss(obs, nu, W, beta, m):
     """
     Log probability for Gaussian with full covariance matrices.
     Here mean vectors and covarience matrices are probability variable with
@@ -88,15 +89,18 @@ def log_like_gauss(obs, nu, V, beta, m):
     """
     nobs, ndim = obs.shape
     nmix = len(m)
-    lnf = np.empty((nobs, nmix))
+    lnF = np.empty((nobs, nmix))
     for k in range(nmix):
         dln2pi = ndim * np.log(2.0 * np.pi)
-        lndetV = - e_lndetw_wishart(nu[k], V[k])
-        cv = V[k] / nu[k]
+        lndetW = - e_lndetw_wishart(nu[k], W[k])
+        cv = W[k] / nu[k]
         q = _sym_quad_form(obs, m[k], cv) + ndim / beta[k]
-        lnf[:, k] = -0.5 * (dln2pi + lndetV + q)
+        lnF[:, k] = -0.5 * (dln2pi + lndetW + q)
+    return lnF
 
-    return lnf
+
+def log_like_poisson(obs, lmbda):
+    return stats.poisson.logpmf(obs, lmbda)
 
 
 def _sym_quad_form(x, mu, A):
@@ -107,16 +111,16 @@ def _sym_quad_form(x, mu, A):
     return q
 
 
-def e_lndetw_wishart(nu, V):
+def e_lndetw_wishart(nu, W):
     """
     mean of log determinant of precision matrix over Wishart <lndet(W)>
     input
       nu [float] : dof parameter of Wichart distribution
-      V [ndarray, shape (D x D)] : base matrix of Wishart distribution
+      W [ndarray, shape (D x D)] : base matrix of Wishart distribution
     """
 
-    D = len(V)
-    E = D * np.log(2.0) - np.log(det(V)) + \
+    D = len(W)
+    E = D * np.log(2.0) - np.log(det(W)) + \
         digamma(np.arange(nu + 1 - D, nu + 1) * 0.5).sum()
 
     return E
@@ -126,33 +130,29 @@ def e_lnpi_dirichlet(alpha):
     return digamma(alpha) - digamma(alpha.sum())
 
 
-def kl_wishart(nu1, V1, nu2, V2):
+def kl_wishart(nu1, W1, nu2, W2):
     """
-    KL-div of Wishart distribution KL[q(nu1,V1)||p(nu2,V2)]
+    KL-div of Wishart distribution KL[q(nu1,W1)||p(nu2,W2)]
     """
 
-    # if nu1 < len(V1) + 1:
-    #     raise ValueError("dof parameter nu1 must larger than len(V1)")
+    # if nu1 < len(W1) + 1:
+    #     raise ValueError("dof parameter nu1 must larger than len(W1)")
     # if nu2 < len(V2) + 1:
-    #     raise ValueError("dof parameter nu2 must larger than len(V2)")
+    #     raise ValueError("dof parameter nu2 must larger than len(W2)")
 
-    # if len(V1) != len(V2):
+    # if len(W1) != len(W2):
     #     raise ValueError("dimension of two matrix dont match, %d and %d" % (
-    #         len(V1), len(V2)))
+    #         len(W1), len(W2)))
 
-    D = len(V1)
-    kl = 0.5 * ((nu1 - nu2) * e_lndetw_wishart(nu1, V1) + nu1 *
-                (np.trace(solve(V1, V2)) - D)) - lnz_wishart(nu1, V1) + lnz_wishart(nu2, V2)
-
-    # if KL < _small_negative_number:
-    #     print(nu1, nu2, V1, V2)
-    #     raise ValueError("KL must be larger than 0")
+    D = len(W1)
+    kl = 0.5 * ((nu1 - nu2) * e_lndetw_wishart(nu1, W1) + nu1 *
+                (np.trace(solve(W1, W2)) - D)) - lnz_wishart(nu1, W1) + lnz_wishart(nu2, W2)
     return kl
 
 
-def kl_gauss_wishart(nu1, V1, beta1, m1, nu2, V2, beta2, m2):
+def kl_gauss_wishart(nu1, W1, beta1, m1, nu2, W2, beta2, m2):
     """
-    KL-div of Gauss-Wishart distr KL[q(nu1,V1,beta1,m1)||p(nu2,V2,beta2,m2)
+    KL-div of Gauss-Wishart distr KL[q(nu1,W1,beta1,m1)||p(nu2,W2,beta2,m2)
     """
     if len(m1) != len(m2):
         raise ValueError(
@@ -161,18 +161,13 @@ def kl_gauss_wishart(nu1, V1, beta1, m1, nu2, V2, beta2, m2):
     D = len(m1)
 
     # first assign KL of Wishart
-    kl1 = kl_wishart(nu1, V1, nu2, V2)
+    kl1 = kl_wishart(nu1, W1, nu2, W2)
 
     # the rest terms
     kl2 = 0.5 * (D * (np.log(beta1 / float(beta2)) + beta2 / float(beta1) -
                       1.0) + beta2 * nu1 * np.dot((m1 - m2),
-                                                  solve(V1, (m1 - m2))))
-
+                                                  solve(W1, (m1 - m2))))
     kl = kl1 + kl2
-
-    # if KL < _small_negative_number:
-    #     raise ValueError("KL must be larger than 0")
-
     return kl
 
 
