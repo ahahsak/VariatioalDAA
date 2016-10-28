@@ -6,25 +6,6 @@ from scipy.spatial.distance import cdist
 from numpy.random import randn
 
 
-def logsum(A, axis=None):
-    """
-    Computes the sum of A assuming A is in the log domain.
-    Returns log(sum(exp(A), axis)) while minimizing the possibility of
-    over/underflow.
-    """
-    Amax = A.max(axis)
-    if axis and A.ndim > 1:
-        shape = list(A.shape)
-        shape[axis] = 1
-        Amax.shape = shape
-    Asum = np.log(np.sum(np.exp(A - Amax), axis))
-    Asum += Amax.reshape(Asum.shape)
-    if axis:
-        # Look out for underflow.
-        Asum[np.isnan(Asum)] = - np.Inf
-    return Asum
-
-
 def normalize(A, axis=None):
     A += np.finfo(float).eps
     Asum = A.sum(axis)
@@ -89,18 +70,19 @@ def log_like_gauss(obs, nu, W, beta, m):
     """
     nobs, ndim = obs.shape
     nmix = len(m)
-    lnF = np.empty((nobs, nmix))
+    lnEm = np.empty((nobs, nmix))
     for k in range(nmix):
         dln2pi = ndim * np.log(2.0 * np.pi)
         lndetW = - e_lndetw_wishart(nu[k], W[k])
         cv = W[k] / nu[k]
         q = _sym_quad_form(obs, m[k], cv) + ndim / beta[k]
-        lnF[:, k] = -0.5 * (dln2pi + lndetW + q)
-    return lnF
+        lnEm[:, k] = -0.5 * (dln2pi + lndetW + q)
+    return lnEm
 
 
-def log_like_poisson(obs, lmbda):
-    return stats.poisson.logpmf(obs, lmbda)
+def log_like_poisson(D, lmbda):
+    lnDur = stats.poisson.logpmf(np.arange(1, D + 1), lmbda)
+    return lnDur
 
 
 def _sym_quad_form(x, mu, A):
