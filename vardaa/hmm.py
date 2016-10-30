@@ -3,8 +3,8 @@ from numpy.random import rand, dirichlet, normal, random, randn
 from scipy.cluster import vq
 from scipy.special import gammaln, digamma
 from scipy.linalg import eig, inv, cholesky
-from vardaa.util import log_like_gauss, kl_dirichlet, \
-    kl_gauss_wishart, normalize, sample_gaussian, e_lnpi_dirichlet
+from vardaa.util import log_like_gauss, kl_dirichlet, kl_gauss_wishart, \
+    normalize, sample_gaussian, e_lnpi_dirichlet
 
 
 class VbHmm():
