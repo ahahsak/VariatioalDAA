@@ -3,7 +3,8 @@ from numpy.random import rand, dirichlet, normal, random, randn
 from scipy.cluster import vq
 from scipy.special import gammaln, digamma
 from scipy.linalg import eig, inv, cholesky
-from vardaa.util import log_like_gauss, kl_dirichlet, kl_gauss_wishart, normalize, sample_gaussian, e_lnpi_dirichlet
+from vardaa.util import logsum, log_like_gauss, kl_dirichlet, kl_gauss_wishart, normalize, sample_gaussian, e_lnpi_dirichlet
+from scipy.misc import logsumexp
 
 
 class VbHmm():
@@ -85,11 +86,12 @@ class VbHmm():
         T = len(lnF)
         lnAlpha *= 0.0
         lnAlpha[0, :] = self._lnpi + lnF[0, :]
+
         for t in range(1, T):
-            lnAlpha[t, :] = np.logaddexp.reduce(
-                lnAlpha[t - 1:t, :] + self._lnA + lnF[t, :], axis=0)
-        lnP = np.logaddexp.reduce(lnAlpha[-1, :], axis=0)
-        return lnAlpha, lnP
+            lnAlpha[t, :] = logsum(lnAlpha[t - 1, :] +
+                                   self._lnA.T, 1) + lnF[t, :]
+
+        return lnAlpha, logsum(lnAlpha[-1, :])
 
     def _backward(self, lnF, lnBeta):
         """
@@ -103,12 +105,12 @@ class VbHmm():
         """
         T = len(lnF)
         lnBeta[T - 1, :] = 0.0
-        for t in reversed(range(T - 1)):
-            lnBeta[t, :] = np.logaddexp.reduce(
-                self._lnA + lnF[t + 1, :] + lnBeta[t + 1, :], axis=0)
-        lnP = np.logaddexp.reduce(
-            lnBeta[0, :] + lnF[0, :] + self._lnpi, axis=0)
-        return lnBeta, lnP
+
+        for t in range(T - 2, -1, -1):
+            lnBeta[t, :] = logsum(
+                self._lnA + lnF[t + 1, :] + lnBeta[t + 1, :], 1)
+
+        return lnBeta, logsum(lnBeta[0, :] + lnF[0, :] + self._lnpi)
 
     def _log_like_f(self, obs):
         return log_like_gauss(obs, self._nu, self._W, self._beta, self._m)
@@ -175,31 +177,28 @@ class VbHmm():
         lnPx_f: log sum of p(x_n) by forward message for scalling
         lnPx_b: log sum of p(x_n) by backward message for scalling
         """
+        T = len(lnF)
         # forward-backward algorithm
         lnAlpha, lnpx_f = self._forward(lnF, lnAlpha)
         lnBeta, lnpx_b = self._backward(lnF, lnBeta)
-
         # check if forward and backward were done correctly
         dlnp = lnpx_f - lnpx_b
         if abs(dlnp) > 1.0e-6:
             print("warning forward and backward are not equivalent")
-
         # compute lnXi for updating transition matrix
-        lnXi = self._calculate_lnXi(lnXi, lnAlpha, lnBeta, lnF)
-        lnXi -= lnpx_f
-
+        lnXi = self._calculate_lnXi(lnXi, lnAlpha, lnBeta, lnF, lnpx_f)
         # compute lnGamma for postetior on hidden states
         lnGamma = lnAlpha + lnBeta - lnpx_f
-
         return lnXi, lnGamma, lnpx_f
 
-    def _calculate_lnXi(self, lnXi, lnAlpha, lnBeta, lnF):
+    def _calculate_lnXi(self, lnXi, lnAlpha, lnBeta, lnF, lnpx_f):
         T = len(lnF)
         for i in range(self.n_states):
             for j in range(self.n_states):
                 for t in range(T - 1):
                     lnXi[t, i, j] = lnAlpha[t, i] + self._lnA[i, j, ] + \
                         lnF[t + 1, j] + lnBeta[t + 1, j]
+        lnXi -= lnpx_f
         return lnXi
 
     def _m_step(self, obs, lnXi, lnGamma):
