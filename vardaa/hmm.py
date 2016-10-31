@@ -101,7 +101,7 @@ class VbHmm():
             lnBeta [ndarray, shape (n,n_states)] : log backward variable
             lnP [float] : lnP(X|theta)
         """
-       T = len(lnF)
+        T = len(lnF)
         lnBeta[T - 1, :] = 0.0
         for t in reversed(range(T - 1)):
             lnBeta[t, :] = np.logaddexp.reduce(
