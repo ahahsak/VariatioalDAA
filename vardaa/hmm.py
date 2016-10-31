@@ -3,8 +3,7 @@ from numpy.random import rand, dirichlet, normal, random, randn
 from scipy.cluster import vq
 from scipy.special import gammaln, digamma
 from scipy.linalg import eig, inv, cholesky
-from vardaa.util import log_like_gauss, kl_dirichlet, kl_gauss_wishart, \
-    normalize, sample_gaussian, e_lnpi_dirichlet
+from vardaa.util import log_like_gauss, kl_dirichlet, kl_gauss_wishart, normalize, sample_gaussian, e_lnpi_dirichlet, logsum
 
 
 class VbHmm():
@@ -86,11 +85,11 @@ class VbHmm():
         T = len(lnF)
         lnAlpha *= 0.0
         lnAlpha[0, :] = self._lnpi + lnF[0, :]
+
         for t in range(1, T):
-            lnAlpha[t, :] = np.logaddexp.reduce(
-                lnAlpha[t - 1:t, :] + self._lnA + lnF[t, :], axis=0)
-        lnP = np.logaddexp.reduce(lnAlpha[-1, :], axis=0)
-        return lnAlpha, lnP
+            lnAlpha[t, :] = logsum(lnAlpha[t - 1, :] +
+                                   self._lnA.T, 1) + lnF[t, :]
+        return lnAlpha, logsum(lnAlpha[-1, :])
 
     def _backward(self, lnF, lnBeta):
         """
@@ -104,12 +103,12 @@ class VbHmm():
         """
         T = len(lnF)
         lnBeta[T - 1, :] = 0.0
-        for t in reversed(range(T - 1)):
-            lnBeta[t, :] = np.logaddexp.reduce(
-                self._lnA + lnF[t + 1, :] + lnBeta[t + 1, :], axis=0)
-        lnP = np.logaddexp.reduce(
-            lnBeta[0, :] + lnF[0, :] + self._lnpi, axis=0)
-        return lnBeta, lnP
+
+        for t in range(T - 2, -1, -1):
+            lnBeta[t, :] = logsum(
+                self._lnA + lnF[t + 1, :] + lnBeta[t + 1, :], 1)
+
+        return lnBeta, logsum(lnBeta[0, :] + lnF[0, :] + self._lnpi)
 
     def _log_like_f(self, obs):
         return log_like_gauss(obs, self._nu, self._W, self._beta, self._m)
