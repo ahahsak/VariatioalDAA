@@ -172,6 +172,27 @@ def kl_gauss_wishart(nu1, V1, beta1, m1, nu2, V2, beta2, m2):
     return kl
 
 
+def kl_poisson_gamma(lmbda1, alpha1, beta1, lmbda2, alpha2, beta2):
+    """
+    KL-div of Poisson-Gamma distr KL[q(lmbda1)||p(lmbda2)]
+    """
+    kl1 = kl_poisson(lmbda1, lmbda2)
+    kl2 = kl_gamma(alpha1, beta1, alpha2, beta2)
+    kl = kl1 + kl2
+
+    return kl
+
+
+def kl_gamma(a1, b1, a2, b2):
+    kl = (a1 - a2) * digamma(a1) - gammaln(a1) + gammaln(a2) + \
+        a2 * (np.log(b1) - np.log(b2)) + a1 * ((a2 - a1) / a1)
+    return kl
+
+
+def kl_poisson(lmbda1, lmbda2):
+    return lmbda1 - lmbda2 + lmbda2 * np.log(lmbda2 / lmbda1)
+
+
 def sample_gaussian(m, cv, n=1):
     """Generate random samples from a Gaussian distribution.
     Parameters
