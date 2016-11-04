@@ -1,22 +1,23 @@
 import numpy as np
+from numpy import newaxis
 from numpy.random import rand, dirichlet, normal, random, randn
 from scipy.cluster import vq
 from scipy.special import gammaln, digamma
 from scipy.linalg import eig, inv, cholesky
-from vardaa.util import log_like_gauss, kl_dirichlet, kl_gauss_wishart, normalize, sample_gaussian, e_lnpi_dirichlet, log_like_poisson
+from vardaa.util import logsum, log_like_gauss, kl_dirichlet, kl_gauss_wishart, normalize, sample_gaussian, e_lnpi_dirichlet, log_like_poisson, kl_poisson_gamma
 
 
 class VbHsmm():
     """
-    VB-HMM with Gaussian emission probability.
+    VB-HSMM with Gaussian emission and Poisson duration probability.
     VB-E step is Forward-Backward Algorithm.
     """
 
     def __init__(self, n, uPi0=0.5, uA0=0.5, m0=0.0,
-                 beta0=1, nu0=1, a0=50.0, b0=10.0, D0=3):
+                 beta0=1, nu0=1, a0=50.0, b0=10.0, lambda0=1.0, D0=3):
 
         self.n_states = n
-        self._Dmax = D0
+        # self._Dmax = D0
 
         # log initial probability
         self._lnpi = np.log(np.tile(1.0 / n, n))
@@ -37,10 +38,11 @@ class VbHsmm():
         self._nu0 = nu0
 
         # Poisson-Gamma
+        self._lambda0 = lambda0
         self._a0 = a0
         self._b0 = b0
 
-    def _initialize_vbhmm(self, obs, scale=10.0):
+    def _initialize_vbhsmm(self, obs, scale=10.0):
         n_states = self.n_states
 
         T, D = obs.shape
@@ -68,7 +70,8 @@ class VbHsmm():
         self._s = np.array(self._W)
 
         # Poisson
-        self._lambda = np.random.gamma(a0 + obs.sum(), 1 / (b0 + T))
+        self._lambda = np.random.gamma(
+            self._a0 + obs.sum(), 1 / (self._b0 + T))
 
     def _allocate_fb(self, obs):
         T = len(obs)
@@ -77,7 +80,8 @@ class VbHsmm():
         lnBeta = np.zeros((T, self.n_states))  # log backward variable
         lnBetastar = np.zeros((T, self.n_states))
         lnXi = np.zeros((T - 1, self.n_states, self.n_states))
-        return lnAlpha, lnAlphastar, lnBeta, lnBetastar, lnXi
+        lnDpost = np.zeros((T, self.n_states, self.n_states))
+        return lnAlpha, lnAlphastar, lnBeta, lnBetastar, lnXi, lnDpost
 
     def _forward(self, lnEm, lnDur, lnAlpha, lnAlphastar):
         """
@@ -121,6 +125,7 @@ class VbHsmm():
             lnP [float] : lnP(X|theta)
         """
         T = len(lnEm)
+        D = len(lnDur)
         lnBeta[T - 1, :] = 0.0
         for t in reversed(range(T - 1)):
             dmax = min(D, T - t)
@@ -139,64 +144,10 @@ class VbHsmm():
 
     def _log_like_f(self, obs):
         lnEm = log_like_gauss(obs, self._nu, self._W, self._beta, self._m)
-        lnDur = log_like_poisson(self._Dmax, self._lambda)
+        lnDur = log_like_poisson(self._Dmax, self.n_states, self._lambda)
         return lnEm, lnDur
 
-    def _calculate_sufficient_statistics(self, obs, lnXi, lnGamma):
-        # z[n,k] = Q(zn=k)
-        nmix = self.n_states
-        t, d = obs.shape
-        self.z = np.exp(np.vstack(lnGamma))
-        self.z0 = np.exp([lg[0] for lg in lnGamma]).sum(0)
-        self._n = self.z.sum(0)
-        self._xbar = np.dot(self.z.T, obs) / self._n[:, np.newaxis]
-        for k in range(nmix):
-            d_obs = obs - self._xbar[k]
-            self._s[k] = np.dot((self.z[:, k] * d_obs.T), d_obs)
-
-    def _update_parameters(self, obs, lnXi, lnGamma):
-        nmix = self.n_states
-        t, d = obs.shape
-        # update parameters of initial prob
-        self._wpi = self._upi + self.z0
-        self._lnpi = e_lnpi_dirichlet(self._wpi)
-
-        # update parameters of transition prob
-        self._wa = self._ua + np.exp(lnXi).sum()
-        self._lnA = digamma(self._wa) - digamma(self._wa)
-
-        for k in range(nmix):
-            self._lnA[k, :] = e_lnpi_dirichlet(self._wa[k, :])
-
-        self._beta = self._beta0 + self._n
-        self._nu = self._nu0 + self._n
-        self._W = self._W0 + self._s
-
-        for k in range(nmix):
-            self._m[k] = (self._beta0 * self._m0 +
-                          self._n[k] * self._xbar[k]) / self._beta[k]
-            dx = self._xbar[k] - self._m0
-            self._W[k] += (self._beta0 * self._n[k] /
-                           self._beta[k] + self._n[k]) * np.outer(dx, dx)
-
-    def _kl_div(self):
-        """
-        Compute KL divergence of initial and transition probabilities
-        """
-        n_states = self.n_states
-        kl_pi = kl_dirichlet(self._wpi, self._upi)
-        kl_A = 0
-        kl_g = 0
-        kl = 0
-        for k in range(n_states):
-            kl_A += kl_dirichlet(self._wa[k], self._ua[k])
-            kl_g += kl_gauss_wishart(self._nu[k], self._W[k], self._beta[k],
-                                     self._m[k], self._nu0, self._W0,
-                                     self._beta0, self._m0)
-        kl += kl_pi + kl_A + kl_g
-        return kl
-
-    def _e_step(self, lnEm, lnDur, lnAlpha, lnAlphastar, lnBeta, lnBetastar, lnXi):
+    def _e_step(self, lnEm, lnDur, lnAlpha, lnAlphastar, lnBeta, lnBetastar, lnXi, lnDpost):
         """
         lnEm [ndarray, shape (n,n_states)] : loglikelihood of emissions
         lnAlpha [ndarray, shape (n, n_states]: log forward message
@@ -221,45 +172,93 @@ class VbHsmm():
         # compute lnGamma for postetior on hidden states
         lnGamma = lnAlpha + lnBeta - lnpx_f
 
-        # compute lnDelta for postetior on durations
-        lnDurpost = self._calculate_lnDelta(
-            lnDelta, lnAlphastar, lnBeta, lnEm, lnpx_f)
+        # compute lnDpost for postetior on durations
+        lnDpost = self._calculate_lnDpost(
+            lnDpost, lnAlphastar, lnBeta, lnEm, lnDur, lnpx_f)
 
-        return lnXi, lnGamma, lnpx_f
+        return lnXi, lnGamma, lnDpost, lnpx_f
 
-    def _calculate_lnXi(self, lnXi, lnAlpha, lnBeta, lnEm, lnpx_f):
+    def _calculate_lnXi(self, lnXi, lnAlpha, lnBetastar, lnEm, lnpx_f):
         T = len(lnEm)
         for i in range(self.n_states):
             for j in range(self.n_states):
                 for t in range(T - 1):
                     lnXi[t, i, j] = lnAlpha[t, i] + self._lnA[i, j, ] + \
-                        lnEm[t + 1, j] + lnBeta[t + 1, j]
+                        lnEm[t + 1, j] + lnBetastar[t, j]
         lnXi -= lnpx_f
         return lnXi
 
-    def _calculate_lnDurpost(self, lnDelta, lnAlphastar, lnBeta, lnEm, lnpx_f):
-        T = len(lnEm)
-        for i in range(self.n_states):
-            for j in range(self.n_states):
-                for d in range(T - 1):
-                    for t in range(T - d):
-                        lnDurpost[t, i, j, d] = lnDur[d, ]
+    def _calculate_lnDpost(self, lnDpost, lnAlphastar, lnBeta, lnEm, lnDur, lnpx_f):
+        # mattj's thesis (5.2.23)
+        D = lnEm.shape[1]
+        lnEm_cum = np.cumsum(lnEm, axis=0)
+        for d in range(D):
+            lnDpost[:T - d, d] = lnAlphastar[:T - d] + \
+                lnDur[d][newaxis, :] + lnEm_cum[d:] - \
+                lnEm_cum[:T - d] + lnBeta[d:]
+        lnDpost = np.logaddexp.reduce(lnDpost, axis=0)
+        lnDpost -= np.logaddexp.reduce(lDpost, axis=0)[newaxis, :] - lnpx_f
+        return lnDpost
 
     def _m_step(self, obs, lnXi, lnGamma):
-        self._calculate_sufficient_statistics(obs, lnXi, lnGamma)
-        self._update_parameters(obs, lnXi, lnGamma)
+        self._calculate_sufficient_statistics(obs, lnGamma)
+        self._update_parameters(obs, lnXi, lnGamma, lnDpost)
+
+    def _calculate_sufficient_statistics(self, obs, lnGamma):
+        # z[n,k] = Q(zn=k)
+        nmix = self.n_states
+        t = obs.shape[0]
+        self.z = np.exp(np.vstack(lnGamma))
+        self.z0 = np.exp([lg[0] for lg in lnGamma]).sum(0)
+        # N_k in PRML(10.51)
+        self._n = self.z.sum(0)
+        # \bar{x}_k in PRML(10.52)
+        self._xbar = np.dot(self.z.T, obs) / self._n[:, newaxis]
+        for k in range(nmix):
+            d_obs = obs - self._xbar[k]
+            # S_k in PRML(10.53)
+            self._s[k] = np.dot((self.z[:, k] * d_obs.T), d_obs)
+
+    # TODO
+    def _update_parameters(self, obs, lnXi, lnGamma):
+        nmix = self.n_states
+        t = obs.shape[0]
+        # update parameters of initial prob
+        self._wpi = self._upi + self.z0
+        self._lnpi = e_lnpi_dirichlet(self._wpi)
+
+        # update parameters of transition prob
+        self._wa = self._ua + np.exp(lnXi).sum()
+        # self._lnA = digamma(self._wa) - digamma(self._wa)
+        for k in range(nmix):
+            self._lnA[k, :] = e_lnpi_dirichlet(self._wa[k, :])
+
+        # update parameters of emmition distr
+        self._beta = self._beta0 + self._n
+        self._nu = self._nu0 + self._n
+        self._W = self._W0 + self._s
+        for k in range(nmix):
+            self._m[k] = (self._beta0 * self._m0 +
+                          self._n[k] * self._xbar[k]) / self._beta[k]
+            dx = self._xbar[k] - self._m0
+            self._W[k] += (self._beta0 * self._n[k] /
+                           self._beta[k] + self._n[k]) * np.outer(dx, dx)
+
+        # update parameters of duration distr
 
     def fit(self, obs, n_iter=10000, eps=1.0e-4,
             ifreq=10, old_f=1.0e20):
-        '''Fit the HMM via VB-EM algorithm'''
-        self._initialize_vbhmm(obs)
+        '''Fit the HSMM via VB-EM algorithm'''
+        self._initialize_vbhsmm(obs)
         old_f = 1.0e20
-        lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
+        lnAlpha, lnAlphastar, lnBeta, lnBetastar, lnXi, lnDpost = self._allocate_fb(
+            obs)
 
         for i in range(n_iter):
             # VB-E step
             lnEm, lnDur = self._log_like_f(obs)
-            lnXi, lnGamma, lnp = self._e_step(lnEm, lnAlpha, lnBeta, lnXi)
+            lnXi, lnGamma, lnDpost, lnp = self._e_step(
+                lnEm, lnDur, lnAlpha, lnAlphastar, lnBeta, lnBetastar, lnXi, lnDpost)
 
             # check convergence
             kl = self._kl_div()
@@ -281,6 +280,26 @@ class VbHsmm():
 
             # update parameters via VB-M step
             self._m_step(obs, lnXi, lnGamma)
+
+    def _kl_div(self):
+        """
+        Compute KL divergence of initial and transition probabilities
+        """
+        n_states = self.n_states
+        kl_pi = kl_dirichlet(self._wpi, self._upi)
+        kl_A = 0
+        kl_g = 0
+        kl_p = 0
+        kl = 0
+        for k in range(n_states):
+            kl_A += kl_dirichlet(self._wa[k], self._ua[k])
+            kl_g += kl_gauss_wishart(self._nu[k], self._W[k], self._beta[k],
+                                     self._m[k], self._nu0, self._W0,
+                                     self._beta0, self._m0)
+            kl_p += kl_poisson_gamma(self._lambda[k], self._a[k], self._b[
+                                     k], self._lambda0, self._a0, self._b0)
+        kl += kl_pi + kl_A + kl_g + kl_p
+        return kl
 
     def simulate(self, T, mu, cv):
         n, d = mu.shape
