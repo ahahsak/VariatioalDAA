@@ -77,7 +77,6 @@ def lnz_wishart(nu, V):
     D = len(V)
     lnZ = 0.5 * nu * (D * np.log(2.0) - np.log(det(V))) \
         + gammaln(np.arange(nu + 1 - D, nu + 1) * 0.5).sum()
-
     return lnZ
 
 
@@ -179,7 +178,6 @@ def kl_poisson_gamma(lmbda1, alpha1, beta1, lmbda2, alpha2, beta2):
     kl1 = kl_poisson(lmbda1, lmbda2)
     kl2 = kl_gamma(alpha1, beta1, alpha2, beta2)
     kl = kl1 + kl2
-
     return kl
 
 
