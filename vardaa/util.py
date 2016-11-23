@@ -98,10 +98,12 @@ def log_like_gauss(obs, nu, V, beta, m):
     return lnEm
 
 
-def log_like_poisson(D, N, lmbda):
-    # lnDur[d,i] = log p(d|i), shape: (D,N)
-    lnDur = np.hstack(stats.poisson.logpmf(
-        np.arange(1, D + 1), lmbda)[:, newaxis] for n in range(N))
+def log_like_poisson(T, N, lmbda):
+    # lnDur[d,i] = log p(d|i), shape: (T,N)
+    lnDur = np.empty((T, N))
+    possible_durations = np.arange(1, T + 1, dtype=np.float64)
+    for idx in range(N):
+        lnDur[:, idx] = stats.poisson.logpmf(possible_durations, lmbda)
     return lnDur
 
 

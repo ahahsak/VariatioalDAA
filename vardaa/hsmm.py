@@ -16,10 +16,10 @@ class VbHsmm():
     """
 
     def __init__(self, n, uPi0=0.5, uA0=0.5, m0=0.0,
-                 beta0=1, nu0=1, a0=50.0, b0=10.0, lambda0=1.0, D0=3):
+                 beta0=1, nu0=1, a0=50.0, b0=10.0,
+                 lambda0=1.0, mf_a0=None, mf_b0=None, trunc=None):
 
         self.n_states = n
-        self._D = D0
 
         # log initial probability
         self._lnpi = np.log(np.tile(1.0 / n, n))
@@ -40,9 +40,12 @@ class VbHsmm():
         self._nu0 = nu0
 
         # Poisson-Gamma
-        self._lambda0 = lambda0
         self._a0 = a0
         self._b0 = b0
+        self._a = mf_a0 if mf_a0 is not None else self._a0
+        self._b = mf_a0 if mf_b0 is not None else self._b0
+        self._lambda0 = lambda0
+        self.trunc = trunc
 
     def _initialize_vbhsmm(self, obs, scale=10.0):
         n_states = self.n_states
@@ -72,11 +75,8 @@ class VbHsmm():
         self._s = np.array(self._W)
 
         # Poisson
-        # 行列にしましょう
-        self._lambda = gamma(self._a0 + obs.sum(), 1 / (self._b0 + T))
-        # TODOs
-        # self._a
-        # self._b
+        self._lambda = gamma(self._a + obs.sum(), 1 / (self._b + T), 1)
+        self._a, self._b = self._lambda * self._b0, self._b0
 
     def _allocate_fb(self, obs):
         T = len(obs)
@@ -85,8 +85,7 @@ class VbHsmm():
         lnBeta = np.zeros((T, self.n_states))  # log backward variable
         lnBetastar = np.zeros((T, self.n_states))
         lnXi = np.zeros((T - 1, self.n_states, self.n_states))
-        lnDpost = np.zeros((T, self.n_states, self.n_states))
-        return lnAlpha, lnAlphastar, lnBeta, lnBetastar, lnXi, lnDpost
+        return lnAlpha, lnAlphastar, lnBeta, lnBetastar, lnXi
 
     def _forward(self, lnEm, lnDur, lnAlpha, lnAlphastar):
         """
@@ -131,29 +130,28 @@ class VbHsmm():
         """
         T = len(lnEm)
         D = len(lnDur)
-        lnBeta[T - 1, :] = 0.0
+        lnBeta[-1] = 0.0
         for t in reversed(range(T - 1)):
             dmax = min(D, T - t)
-            b = lnBeta[t:t + dmax] + lnDur[:dmax] + \
-                np.cumsum(lnEm[t:t + dmax], axis=0)
+            b = lnBeta[t:t + dmax - 1] + lnDur[:dmax - 1] + \
+                np.cumsum(lnEm[t:t + dmax - 1], axis=0)
             lnBetastar[t] = np.logaddexp.reduce(b, axis=0)
             if dmax < D:
                 lnBetastar[t] = np.logaddexp(lnBetastar[t], np.logaddexp.reduce(
-                    lnDur[dmax:], axis=0) + np.sum(lnEm[t:], axis=0))
+                    lnDur[dmax - 1:], axis=0) + np.sum(lnEm[t:], axis=0))
             if t > 0:
                 b = lnBetastar[t] + self._lnA
                 lnBeta[t - 1] = np.logaddexp.reduce(b, axis=1)
             lnP = logsum(lnBetastar[0, :] + self._lnpi)
-
         return lnBeta, lnBetastar, lnP
 
     def _log_like_f(self, obs):
         lnEm = log_like_gauss(obs, self._nu, self._W, self._beta, self._m)
-        lnDur = log_like_poisson(self._D, self.n_states, self._lambda)
+        lnDur = log_like_poisson(obs.shape[0], self.n_states, self._lambda)
         return lnEm, lnDur
 
     def _e_step(self, lnEm, lnDur, lnAlpha,
-                lnAlphastar, lnBeta, lnBetastar, lnXi, lnDpost):
+                lnAlphastar, lnBeta, lnBetastar, lnXi):
         """
         lnEm [ndarray, shape (n,n_states)] : loglikelihood of emissions
         lnAlpha [ndarray, shape (n, n_states]: log forward message
@@ -171,18 +169,11 @@ class VbHsmm():
         dlnp = lnpx_f - lnpx_b
         if abs(dlnp) > 1.0e-6:
             print("warning forward and backward are not equivalent")
-
         # compute lnXi for updating transition matrix
         lnXi = self._calculate_lnXi(lnXi, lnAlpha, lnBeta, lnEm, lnpx_f)
-
         # compute lnGamma for postetior on hidden states
         lnGamma = lnAlpha + lnBeta - lnpx_f
-
-        # compute lnDpost for postetior on durations
-        lnDpost = self._calculate_lnDpost(
-            lnDpost, lnAlphastar, lnBeta, lnEm, lnDur, lnpx_f)
-
-        return lnXi, lnGamma, lnDpost, lnpx_f
+        return lnXi, lnGamma, lnpx_f
 
     def _calculate_lnXi(self, lnXi, lnAlpha, lnBetastar, lnEm, lnpx_f):
         T = len(lnEm)
@@ -194,22 +185,9 @@ class VbHsmm():
         lnXi -= lnpx_f
         return lnXi
 
-    def _calculate_lnDpost(self, lnDpost, lnAlphastar, lnBeta,
-                           lnEm, lnDur, lnpx_f):
-        # mattj's thesis (5.2.23)
-        T, D = lnEm.shape
-        lnEm_cum = np.cumsum(lnEm, axis=0)
-        for d in range(D):
-            lnDpost[:T - d, d] = lnAlphastar[:T - d] + \
-                lnDur[d][newaxis, :] + lnEm_cum[d:] - \
-                lnEm_cum[:T - d] + lnBeta[d:]
-        lnDpost = np.logaddexp.reduce(lnDpost, axis=0)
-        lnDpost -= np.logaddexp.reduce(lnDpost, axis=0)[newaxis, :] - lnpx_f
-        return lnDpost
-
     def _m_step(self, obs, lnXi, lnGamma):
         self._calculate_sufficient_statistics(obs, lnGamma)
-        self._update_parameters(obs, lnXi, lnGamma, lnDpost)
+        self._update_parameters(obs, lnXi, lnGamma)
 
     def _calculate_sufficient_statistics(self, obs, lnGamma):
         # z[n,k] = Q(zn=k)
@@ -251,10 +229,11 @@ class VbHsmm():
             self._W[k] += (self._beta0 * self._n[k] /
                            self._beta[k] + self._n[k]) * np.outer(dx, dx)
 
-        # update parameters of duration distr
-        self._a = self._a0 + self._n
-        self._b = self._b0 + self._n
-        self._lambda = (self._a * np.exp(lnDpost).sum()) / self._b
+        # update parameters of duration distribution
+        self._a = self._a0 + obs.sum()
+        self._b = self._b0 + t
+        # self._lambda = (self._a * np.exp(lnDpost).sum()) / self._b
+        self._lambda = self._a / self._b
 
     def fit(self, obs, n_iter=10000, eps=1.0e-4,
             ifreq=10, old_f=1.0e20):
@@ -262,14 +241,14 @@ class VbHsmm():
         self._initialize_vbhsmm(obs)
         old_f = 1.0e20
         (lnAlpha, lnAlphastar, lnBeta,
-         lnBetastar, lnXi, lnDpost) = self._allocate_fb(obs)
+         lnBetastar, lnXi) = self._allocate_fb(obs)
 
         for i in range(n_iter):
             # VB-E step
             lnEm, lnDur = self._log_like_f(obs)
-            lnXi, lnGamma, lnDpost, lnp = self._e_step(
+            lnXi, lnGamma, lnp = self._e_step(
                 lnEm, lnDur, lnAlpha, lnAlphastar, lnBeta,
-                lnBetastar, lnXi, lnDpost)
+                lnBetastar, lnXi)
 
             # check convergence
             kl = self._kl_div()
@@ -307,8 +286,8 @@ class VbHsmm():
             kl_g += kl_gauss_wishart(self._nu[k], self._W[k], self._beta[k],
                                      self._m[k], self._nu0, self._W0,
                                      self._beta0, self._m0)
-            kl_p += kl_poisson_gamma(self._lambda[k], self._a[k], self._b[k],
-                                     self._lambda0, self._a0, self._b0)
+        kl_p += kl_poisson_gamma(self._lambda, self._a, self._b,
+                                 self._lambda0, self._a0, self._b0)
         kl += kl_pi + kl_A + kl_g + kl_p
         return kl
 
