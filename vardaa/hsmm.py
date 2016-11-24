@@ -95,27 +95,30 @@ class VbHsmm():
           lnAlpha [ndarray, shape (n,n_states)] : log forward variable
         output
           lnAlpha [ndarray, shape (n,n_states)] : log forward variable
-          lnP [float] : lnP(X|theta)
+          lnP [float] : lnP(X|theta)(normalizer)
         """
         T = len(lnEm)
-        D = len(lnDur)
+        D = self.trunc if self.trunc is not None else T
         lnAlphastar[0] = self._lnpi
         lnAlpha *= 0.0
-        for t in range(T - 1):
-            dmax = min(D, t + 1)
-            a = lnAlphastar[t + 1 - dmax:t + 1] + lnDur[:dmax][::-1] + \
-                np.cumsum(lnEm[t + 1 - dmax:t + 1][::-1], axis=0)[::-1]
-            lnAlpha[t] = logsum(a, axis=0)
-            a = lnAlpha[t][:, newaxis] + self._lnA
-            lnAlphastar[t + 1] = logsum(a, axis=0)
+        for t_ in range(1, T - 1):
+            dmax = min(D, t_)
+            if t_ == 1:
+                a = lnAlphastar[0] + lnDur[1][::-1] + \
+                    np.cumsum(lnEm[1], axis=0)
+            else:
+                a = lnAlphastar[t_ - dmax:t_ - 1] + lnDur[1:dmax][::-1] + \
+                    np.cumsum(lnEm[t_ - dmax + 1:t_], axis=0)
+            lnAlpha[t_] = logsum(a, axis=0)
+            a = lnAlpha[t_] + self._lnA.T
+            lnAlphastar[t_] = logsum(a, axis=1)
 
-        t = T - 1
-        dmax = min(D, t + 1)
-        a = lnAlphastar[t + 1 - dmax:t + 1] + lnDur[:dmax][::-1] + \
-            np.cumsum(lnEm[t + 1 - dmax:t + 1][::-1], axis=0)[::-1]
-        lnAlpha[t] = logsum(a, axis=0)
-        lnP = logsum(lnAlpha[-1, :])
-
+        t_ = T - 1
+        dmax = min(D, t_)
+        a = lnAlphastar[t_ - dmax:t_ - 1] + lnDur[1:dmax][::-1] + \
+            np.cumsum(lnEm[t_ - dmax + 1:t_], axis=0)
+        lnAlpha[t_] = logsum(a, axis=0)
+        lnP = logsum(lnAlpha[-1:])
         return lnAlpha, lnAlphastar, lnP
 
     def _backward(self, lnEm, lnDur, lnBeta, lnBetastar):
@@ -126,23 +129,24 @@ class VbHsmm():
             lnBeta [ndarray, shape (n,n_states)] : log backward variable
         output
             lnBeta [ndarray, shape (n,n_states)] : log backward variable
-            lnP [float] : lnP(X|theta)
+            lnP [float] : lnP(X|theta)(normalizer)
         """
         T = len(lnEm)
-        D = len(lnDur)
-        lnBeta[-1] = 0.0
-        for t in reversed(range(T - 1)):
-            dmax = min(D, T - t)
-            b = lnBeta[t:t + dmax - 1] + lnDur[:dmax - 1] + \
-                np.cumsum(lnEm[t:t + dmax - 1], axis=0)
-            lnBetastar[t] = np.logaddexp.reduce(b, axis=0)
-            if dmax < D:
-                lnBetastar[t] = np.logaddexp(lnBetastar[t], np.logaddexp.reduce(
-                    lnDur[dmax - 1:], axis=0) + np.sum(lnEm[t:], axis=0))
-            if t > 0:
-                b = lnBetastar[t] + self._lnA
-                lnBeta[t - 1] = np.logaddexp.reduce(b, axis=1)
-            lnP = logsum(lnBetastar[0, :] + self._lnpi)
+        D = self.trunc if self.trunc is not None else T
+        lnBeta[T - 1] = 0.
+        for t_ in reversed(range(T - 1)):
+            dmax = min(D, T - t_ - 1)
+            if(dmax == 1):
+                b = lnBeta[T - 1] + lnDur[1] + \
+                    np.cumsum(lnEm[T - 1], axis=0)
+            else:
+                b = lnBeta[t_ + 1:t_ + dmax] + lnDur[1:dmax] + \
+                    np.cumsum(lnEm[t_ + 1:t_ + dmax], axis=0)
+            lnBetastar[t_] = np.logaddexp.reduce(b, axis=0)
+            b = lnBetastar[t_] + self._lnA
+            lnBeta[t_] = logsum(b, axis=1)
+        lnBeta[T - 1] = 1.0
+        lnP = logsum(lnBetastar[0, :] + self._lnpi)
         return lnBeta, lnBetastar, lnP
 
     def _log_like_f(self, obs):
@@ -215,8 +219,8 @@ class VbHsmm():
         # update parameters of transition prob
         self._wa = self._ua + np.exp(lnXi).sum()
         # self._lnA = digamma(self._wa) - digamma(self._wa)
-        for k in range(nmix):
-            self._lnA[k, :] = e_lnpi_dirichlet(self._wa[k, :])
+        # for k in range(nmix):
+        #    self._lnA[k, :] = e_lnpi_dirichlet(self._wa[k, :])
 
         # update parameters of emmition distr
         self._beta = self._beta0 + self._n
@@ -249,7 +253,6 @@ class VbHsmm():
             lnXi, lnGamma, lnp = self._e_step(
                 lnEm, lnDur, lnAlpha, lnAlphastar, lnBeta,
                 lnBetastar, lnXi)
-
             # check convergence
             kl = self._kl_div()
             f = -lnp + kl
@@ -264,12 +267,10 @@ class VbHsmm():
             elif df >= 0.0:
                 print("% 6dth iter, F = % 15.8e  df = % 15.8e warning" %
                       (i, f, df))
-
             old_f = f
             print(old_f)
-
             # update parameters via VB-M step
-            self._m_step(obs, lnXi, lnGamma)
+            # self._m_step(obs, lnXi, lnGamma)
 
     def _kl_div(self):
         """
