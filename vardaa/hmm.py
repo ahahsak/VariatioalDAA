@@ -9,8 +9,10 @@ from vardaa.util import (logsum, log_like_gauss, kl_dirichlet,
 
 
 class VbHmm():
-    # VB-HMM with Gaussian emission probability.
-    # VB-E step is Forward-Backward Algorithm.
+    """
+    VB-HMM with Gaussian emission probability.
+    VB-E step is Forward-Backward Algorithm.
+    """
 
     def __init__(self, n, obs, synthetic_T, synthetic_mu, synthetic_cv,
                  uPi0=0.5, uA0=0.5, m0=0, beta0=1, nu0=1, scale=10.0):
@@ -71,13 +73,15 @@ class VbHmm():
         return lnAlpha, lnBeta, lnXi
 
     def _forward(self, lnF, lnAlpha):
-        # Use forward algorith to calculate forward variables and loglikelihood
-        # input
-        #  lnF [ndarray, shape (n,n_states)] : loglikelihood of emissions
-        #  lnAlpha [ndarray, shape (n,n_states)] : log forward variable
-        # output
-        #  lnAlpha [ndarray, shape (n,n_states)] : log forward variable
-        #  lnP [float] : lnP(X|theta)
+        """
+        Use forward algorith to calculate forward variables and loglikelihood
+        input
+          lnF [ndarray, shape (n,n_states)] : loglikelihood of emissions
+          lnAlpha [ndarray, shape (n,n_states)] : log forward variable
+        output
+          lnAlpha [ndarray, shape (n,n_states)] : log forward variable
+          lnP [float] : lnP(X|theta)
+        """
         T = len(lnF)
         lnAlpha *= 0.0
         lnAlpha[0, :] = self._lnpi + lnF[0, :]
@@ -89,13 +93,15 @@ class VbHmm():
         return lnAlpha, logsum(lnAlpha[-1, :])
 
     def _backward(self, lnF, lnBeta):
-        # backward algorithm to calculate backward variables and loglikelihood
-        # input
-        #    lnF [ndarray, shape (n,n_states)] : loglikelihood of emissions
-        #    lnBeta [ndarray, shape (n,n_states)] : log backward variable
-        # output
-        #    lnBeta [ndarray, shape (n,n_states)] : log backward variable
-        #    lnP [float] : lnP(X|theta)
+        """
+        Use backward algorith to calculate backward variables and loglikelihood
+        input
+            lnF [ndarray, shape (n,n_states)] : loglikelihood of emissions
+            lnBeta [ndarray, shape (n,n_states)] : log backward variable
+        output
+            lnBeta [ndarray, shape (n,n_states)] : log backward variable
+            lnP [float] : lnP(X|theta)
+        """
         T = len(lnF)
         lnBeta[T - 1, :] = 0.0
 
@@ -147,7 +153,9 @@ class VbHmm():
                            self._beta[k] + self._n[k]) * np.outer(dx, dx)
 
     def _kl_div(self):
-        # Compute KL divergence of initial and transition probabilities
+        """
+        Compute KL divergence of initial and transition probabilities
+        """
         n_states = self.n_states
         kl_pi = kl_dirichlet(self._wpi, self._upi)
         kl_A = 0
@@ -162,12 +170,13 @@ class VbHmm():
         return kl
 
     def _e_step(self, lnF, lnAlpha, lnBeta, lnXi):
-        # lnF [ndarray, shape (n,n_states)] : loglikelihood of emissions
-        # lnAlpha [ndarray, shape (n, n_states]: log forward message
-        # lnBeta [ndarray, shape (n, n_states)]: log backward message
-        # lnPx_f: log sum of p(x_n) by forward message for scalling
-        # lnPx_b: log sum of p(x_n) by backward message for scalling
-
+        """
+        lnF [ndarray, shape (n,n_states)] : loglikelihood of emissions
+        lnAlpha [ndarray, shape (n, n_states]: log forward message
+        lnBeta [ndarray, shape (n, n_states)]: log backward message
+        lnPx_f: log sum of p(x_n) by forward message for scalling
+        lnPx_b: log sum of p(x_n) by backward message for scalling
+        """
         T = len(lnF)
         # forward-backward algorithm
         lnAlpha, lnpx_f = self._forward(lnF, lnAlpha)
@@ -198,7 +207,7 @@ class VbHmm():
 
     def fit(self, obs, n_iter=10000, eps=1.0e-4,
             ifreq=10, old_f=1.0e20):
-        # Fit the HMM via VB-EM algorithm
+        '''Fit the HMM via VB-EM algorithm'''
         old_f = 1.0e20
         lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
 
@@ -206,6 +215,7 @@ class VbHmm():
             # VB-E step
             lnF = self._log_like_f(obs)
             lnXi, lnGamma, lnp = self._e_step(lnF, lnAlpha, lnBeta, lnXi)
+
             # check convergence
             kl = self._kl_div()
             f = -lnp + kl
@@ -220,8 +230,10 @@ class VbHmm():
             elif df >= 0.0:
                 print("% 6dth iter, F = % 15.8e  df = % 15.8e warning" %
                       (i, f, df))
+
             old_f = f
             print(old_f)
+
             # update parameters via VB-M step
             self._m_step(obs, lnXi, lnGamma)
 
@@ -239,3 +251,17 @@ class VbHmm():
             z[t] = (A_cdf[z[t - 1]] > r[t]).argmax()
             o[t] = sample_gaussian(mu[z[t]], cv[z[t]])
         return z, o
+
+    '''
+    def _eval_hidden_states(self, obs):
+        """
+        Performe one Estep.
+        Then obtain variational free energy and posterior over hidden states
+        """
+
+        lnF = self._log_like_f(obs)
+        lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
+        lnXi, lnGamma, lnp = self._e_step(lnF, lnAlpha, lnBeta, lnXi)
+        z = np.exp(lnGamma)
+        return z, lnp
+    '''
