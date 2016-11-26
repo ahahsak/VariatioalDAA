@@ -3,8 +3,9 @@ from numpy.random import rand, dirichlet, normal, random, randn
 from scipy.cluster import vq
 from scipy.special import gammaln, digamma
 from scipy.linalg import eig, inv, cholesky
-from vardaa.util import logsum, log_like_gauss, kl_dirichlet, kl_gauss_wishart, normalize, sample_gaussian, e_lnpi_dirichlet
-from scipy.misc import logsumexp
+from vardaa.util import (logsum, log_like_gauss, kl_dirichlet,
+                         kl_gauss_wishart, normalize, sample_gaussian,
+                         e_lnpi_dirichlet)
 
 
 class VbHmm():
@@ -13,55 +14,54 @@ class VbHmm():
     VB-E step is Forward-Backward Algorithm.
     """
 
-    def __init__(self, n, uPi0=0.5, uA0=0.5, m0=0.0, beta0=1, nu0=1):
-
+    def __init__(self, n, obs, synthetic_T, synthetic_mu, synthetic_cv,
+                 uPi0=0.5, uA0=0.5, m0=0, beta0=1, nu0=1, scale=10.0):
+        # number of hidden states
         self.n_states = n
-        # log initial probability
-        self._lnpi = np.log(np.tile(1.0 / n, n))
-        # log transition probability
-        self._lnA = np.log(dirichlet([1.0] * n, n))
 
-        # prior parameter
-        self._upi = np.ones(n) * uPi0   # first states prob
-        self._ua = np.ones((n, n)) * uA0     # trans prob
-
-        # posterior parameter
-        self._wpi = np.array(self._upi)  # first states prob
-        self._wa = np.array(self._ua)  # trans prob
-
-        # Gauss
+        # hyperparameters for prior
+        # for initial prob
+        self._upi = np.ones(n) * uPi0
+        # for trans prob
+        self._ua = np.ones((n, n)) * uA0
+        # hyperparameters for emission distr(Gauss)
         self._m0 = m0
         self._beta0 = beta0
-
-        # Wishert
+        # hyper parameters for emission distri(Wishert)
         self._nu0 = nu0
 
-    def _initialize_vbhmm(self, obs, scale=10.0):
-        n_states = self.n_states
+        # parameters for posterior
+        # for initial prob
+        self._wpi = np.array(self._upi)
+        # for transition prob
+        self._wa = np.array(self._ua)
+
+        # log initial probability
+        self._lnpi = np.log(np.tile(1.0 / n, n))
+        # log transition probability matrix
+        self._lnA = np.log(dirichlet([1.0] * n, n))
+
+        if obs is None:
+            self.codes, self.obs = self.simulate(
+                synthetic_T, synthetic_mu, synthetic_cv)
+            obs = self.obs
 
         T, D = obs.shape
-        self.mu, _ = vq.kmeans2(obs, n_states)
-        self.cv = np.tile(np.identity(D), (n_states, 1, 1))
 
+        # Initialize prior parameters
         if self._nu0 < D:
             self._nu0 += D
-
         self._m0 = np.mean(obs, 0)
         self._W0 = np.atleast_2d(np.cov(obs.T)) * scale
 
-        self.A = dirichlet([1.0] * n_states, n_states)   # trans matrix
-        self.pi = np.tile(1.0 / n_states, n_states)  # first state matrix
-
-        # posterior for hidden states
-        self.z = dirichlet(np.tile(1.0 / n_states, n_states), T)
-        # Gauss
-        self._m, _ = vq.kmeans2(obs, n_states, minit='points')
-        self._beta = np.tile(self._beta0, n_states)
-        # Wishert
-
-        self._W = np.tile(np.array(self._W0), (n_states, 1, 1))
-        self._nu = np.tile(float(T) / n_states, n_states)
-
+        # Initialize posterior parameters
+        self.z = dirichlet(np.tile(1.0 / n, n), T)
+        # mf parameters of emission distr (Gauss)
+        self._m, _ = vq.kmeans2(obs, n, minit='points')
+        self._beta = np.tile(self._beta0, n)
+        # mf parameters of emission distr (Wishert)
+        self._W = np.tile(np.array(self._W0), (n, 1, 1))
+        self._nu = np.tile(float(T) / n, n)
         # auxiliary variable (PRML p.192 N_k S_k)
         self._s = np.array(self._W)
 
@@ -119,8 +119,9 @@ class VbHmm():
         # z[n,k] = Q(zn=k)
         nmix = self.n_states
         t, d = obs.shape
-        self.z = np.exp(np.vstack(lnGamma))
-        self.z0 = np.exp([lg[0] for lg in lnGamma]).sum(0)
+        self.z = np.exp(lnGamma)
+        # self.z = np.exp(np.vstack(lnGamma))
+        # self.z0 = np.exp([lg[0] for lg in lnGamma]).sum(0)
         self._n = self.z.sum(0)
         self._xbar = np.dot(self.z.T, obs) / self._n[:, np.newaxis]
         for k in range(nmix):
@@ -131,7 +132,7 @@ class VbHmm():
         nmix = self.n_states
         t, d = obs.shape
         # update parameters of initial prob
-        self._wpi = self._upi + self.z0
+        self._wpi = self._upi + self.z[0]
         self._lnpi = e_lnpi_dirichlet(self._wpi)
 
         # update parameters of transition prob
@@ -208,7 +209,6 @@ class VbHmm():
     def fit(self, obs, n_iter=10000, eps=1.0e-4,
             ifreq=10, old_f=1.0e20):
         '''Fit the HMM via VB-EM algorithm'''
-        self._initialize_vbhmm(obs)
         old_f = 1.0e20
         lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
 
