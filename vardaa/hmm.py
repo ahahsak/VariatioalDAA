@@ -251,17 +251,3 @@ class VbHmm():
             z[t] = (A_cdf[z[t - 1]] > r[t]).argmax()
             o[t] = sample_gaussian(mu[z[t]], cv[z[t]])
         return z, o
-
-    '''
-    def _eval_hidden_states(self, obs):
-        """
-        Performe one Estep.
-        Then obtain variational free energy and posterior over hidden states
-        """
-
-        lnF = self._log_like_f(obs)
-        lnAlpha, lnBeta, lnXi = self._allocate_fb(obs)
-        lnXi, lnGamma, lnp = self._e_step(lnF, lnAlpha, lnBeta, lnXi)
-        z = np.exp(lnGamma)
-        return z, lnp
-    '''
