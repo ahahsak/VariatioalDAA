@@ -42,8 +42,8 @@ class VbHmm():
         self._lnA = np.log(dirichlet([1.0] * n, n))
 
         if obs is None:
-            self.codes, self.obs = self.simulate(
-                synthetic_T, synthetic_mu, synthetic_cv)
+            self.codes, self.obs = simulate(
+                synthetic_T, synthetic_mu, synthetic_cv, self._lnpi, self._lnA)
             obs = self.obs
 
         T, D = obs.shape
@@ -66,7 +66,6 @@ class VbHmm():
         self._s = np.array(self._W)
 
     def _allocate_fb(self, obs):
-        # fbアルゴリズムを走らせた時の一時保存用
         T = len(obs)
         lnAlpha = np.zeros((T, self.n_states))  # log forward variable
         lnBeta = np.zeros((T, self.n_states))  # log backward variable
@@ -238,11 +237,11 @@ class VbHmm():
             # update parameters via VB-M step
             self._m_step(obs, lnXi, lnGamma)
 
-    def simulate(self, T, mu, cv):
+    @staticmethod
+    def simulate(T, mu, cv, lnpi, lnA):
         n, d = mu.shape
-
-        pi_cdf = np.exp(self._lnpi).cumsum()
-        A_cdf = np.exp(self._lnA).cumsum(1)
+        pi_cdf = np.exp(lnpi).cumsum()
+        A_cdf = np.exp(lnA).cumsum(1)
         z = np.zeros(T, dtype=np.int)
         o = np.zeros((T, d))
         r = random(T)
