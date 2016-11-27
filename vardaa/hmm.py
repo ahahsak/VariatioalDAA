@@ -5,7 +5,7 @@ from scipy.special import gammaln, digamma
 from scipy.linalg import eig, inv, cholesky
 from vardaa.util import logsum, log_like_gauss, kl_dirichlet, kl_gauss_wishart, normalize, sample_gaussian, e_lnpi_dirichlet
 from scipy.misc import logsumexp
-
+from vardaa.models import Model
 
 class VbHmm():
     """
@@ -204,6 +204,9 @@ class VbHmm():
     def _m_step(self, obs, lnXi, lnGamma):
         self._calculate_sufficient_statistics(obs, lnXi, lnGamma)
         self._update_parameters(obs, lnXi, lnGamma)
+
+    def to_model(self):
+        return Model.of(self._wa, self._nu, self._W, self._m)
 
     def fit(self, obs, n_iter=10000, eps=1.0e-4,
             ifreq=10, old_f=1.0e20):

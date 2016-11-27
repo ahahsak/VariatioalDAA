@@ -13,9 +13,9 @@ def test_show():
     model.lnA = lnA
     z, o2 = model.simulate(50 * 10, mu, cv)
     model.fit(o2)
-    result = Model(model._wa, model._nu, model._W, model._m)
-    result.show()
 
+    result = model.to_model()
+    result.show()
 
 def test_decode():
     model = VbHmm(3)
@@ -23,7 +23,8 @@ def test_decode():
     model.lnA = lnA
     z, o2 = model.simulate(50 * 10, mu, cv)
     model.fit(o2)
-    result = Model(model._wa, model._nu, model._W, model._m)
+
+    result = model.to_model()
     codes = result.decode(model.z)
 
 
@@ -42,7 +43,6 @@ def test_decode():
 @nottest
 def test_getExpectations():
     pass
-
 
 def create_parameters():
     mu = np.array([[3.0, 3.0], [0.0, 0.0], [-4.0, 0.0]])
