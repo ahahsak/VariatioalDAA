@@ -1,14 +1,13 @@
 import numpy as np
-from vardaa.hmm import VbHmm
+import json
+# from vardaa.hmm import VbHmm
 from vardaa.util import normalize
 from scipy.linalg import eig
 
 
 class Model():
 
-    def __init__(self, wa, nu, W, m):
-        pi, A, mu, cv = Model._get_expectations(wa, nu, W, m)
-
+    def __init__(self, pi, A, mu, cv):
         self.pi = pi
         self.A = A
         self.mu = mu
@@ -56,6 +55,15 @@ class Model():
         return f
     '''
 
+    def to_dictionary(self):
+        data = {
+            'pi': self.pi.tolist(),
+            'A': self.A.tolist(),
+            'mu': self.mu.tolist(),
+            'cv': self.cv.tolist(),
+        }
+        return data
+
     @staticmethod
     def _get_expectations(wa, nu, W, m):
         """
@@ -73,3 +81,16 @@ class Model():
         cv = W / nu[:, np.newaxis, np.newaxis]
 
         return pi, A, mu, cv
+
+    @staticmethod
+    def of(wa, nu, W, m):
+        pi, A, mu, cv = Model._get_expectations(wa, nu, W, m)
+        return Model(pi, A, mu, cv)
+
+    @staticmethod
+    def from_dictionary(dictionary):
+        pi = np.array(dictionary['pi'])
+        A = np.array(dictionary['A'])
+        mu = np.array(dictionary['mu'])
+        cv = np.array(dictionary['cv'])
+        return Model(pi, A, mu, cv)
