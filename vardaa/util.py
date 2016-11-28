@@ -103,8 +103,16 @@ def log_like_poisson(T, N, lmbda):
     lnDur = np.empty((T, N))
     possible_durations = np.arange(1, T + 1, dtype=np.float64)
     for idx in range(N):
-        lnDur[:, idx] = stats.poisson.logpmf(possible_durations, lmbda)
+        lnDur[:, idx] = _log_like_poisson(possible_durations, lmbda)
     return lnDur
+
+
+def _log_like_poisson(x, lmbda):
+    x = np.array(x, ndmin=1)
+    raw = np.empty(x.shape)
+    raw[x >= 0] = -lmbda + x[x >= 0] * np.log(lmbda) - gammaln(x[x >= 0] + 1)
+    raw[x < 0] = -np.inf
+    return raw
 
 
 def _sym_quad_form(x, mu, A):
