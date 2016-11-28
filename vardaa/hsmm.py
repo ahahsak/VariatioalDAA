@@ -16,8 +16,8 @@ class VbHsmm():
     """
 
     def __init__(self, n, uPi0=0.5, uA0=0.5, m0=0.0,
-                 beta0=1, nu0=1, a0=50.0, b0=10.0,
-                 lambda0=1.0, mf_a0=None, mf_b0=None, trunc=None):
+                 beta0=1, nu0=1, a0=2 * 30, b0=2.0,
+                 lambda0=None, mf_a0=None, mf_b0=None, trunc=None):
 
         self.n_states = n
 
@@ -44,7 +44,8 @@ class VbHsmm():
         self._b0 = b0
         self._a = mf_a0 if mf_a0 is not None else self._a0
         self._b = mf_a0 if mf_b0 is not None else self._b0
-        self._lambda0 = lambda0
+        self._lambda0 = gamma(
+            self._a0, 1 / self._b0) if lambda0 is None else lambda0
         self.trunc = trunc
 
     def _initialize_vbhsmm(self, obs, scale=10.0):
@@ -75,7 +76,7 @@ class VbHsmm():
         self._s = np.array(self._W)
 
         # Poisson
-        self._lambda = gamma(self._a + obs.sum(), 1 / (self._b + T), 1)
+        self._lambda = gamma(self._a + obs.sum(), 1 / (self._b + T))
         self._a, self._b = self._lambda * self._b0, self._b0
 
     def _allocate_fb(self, obs):
@@ -84,8 +85,7 @@ class VbHsmm():
         lnAlphastar = np.zeros((T, self.n_states))
         lnBeta = np.zeros((T, self.n_states))  # log backward variable
         lnBetastar = np.zeros((T, self.n_states))
-        lnXi = np.zeros((T - 1, self.n_states, self.n_states))
-        return lnAlpha, lnAlphastar, lnBeta, lnBetastar, lnXi
+        return lnAlpha, lnAlphastar, lnBeta, lnBetastar
 
     def _forward(self, lnEm, lnDur, lnAlpha, lnAlphastar):
         """
@@ -100,24 +100,19 @@ class VbHsmm():
         T = len(lnEm)
         D = self.trunc if self.trunc is not None else T
         lnAlphastar[0] = self._lnpi
-        lnAlpha *= 0.0
-        for t_ in range(1, T - 1):
-            dmax = min(D, t_)
-            if t_ == 1:
-                a = lnAlphastar[0] + lnDur[1][::-1] + \
-                    np.cumsum(lnEm[1], axis=0)
-            else:
-                a = lnAlphastar[t_ - dmax:t_ - 1] + lnDur[1:dmax][::-1] + \
-                    np.cumsum(lnEm[t_ - dmax + 1:t_], axis=0)
-            lnAlpha[t_] = logsum(a, axis=0)
-            a = lnAlpha[t_] + self._lnA.T
-            lnAlphastar[t_] = logsum(a, axis=1)
+        for t in range(T - 1):
+            dmax = min(D, t + 1)
+            a = lnAlphastar[t + 1 - dmax:t + 1] + lnDur[:dmax][::-1] + \
+                np.cumsum(lnEm[t + 1 - dmax:t + 1][::-1], axis=0)[::-1]
+            lnAlpha[t] = logsum(a, axis=0)
 
-        t_ = T - 1
-        dmax = min(D, t_)
-        a = lnAlphastar[t_ - dmax:t_ - 1] + lnDur[1:dmax][::-1] + \
-            np.cumsum(lnEm[t_ - dmax + 1:t_], axis=0)
-        lnAlpha[t_] = logsum(a, axis=0)
+            a = lnAlpha[t][:, newaxis] + self._lnA
+            lnAlphastar[t + 1] = logsum(a, axis=0)
+        t = T - 1
+        dmax = min(D, t + 1)
+        a = lnAlphastar[t + 1 - dmax:t + 1] + lnDur[:dmax][::-1] + \
+            np.cumsum(lnEm[t + 1 - dmax:t + 1][::-1], axis=0)[::-1]
+        lnAlpha[t] = logsum(a, axis=0)
         lnP = logsum(lnAlpha[-1:])
         return lnAlpha, lnAlphastar, lnP
 
@@ -134,18 +129,20 @@ class VbHsmm():
         T = len(lnEm)
         D = self.trunc if self.trunc is not None else T
         lnBeta[T - 1] = 0.
-        for t_ in reversed(range(T - 1)):
-            dmax = min(D, T - t_ - 1)
-            if(dmax == 1):
-                b = lnBeta[T - 1] + lnDur[1] + \
-                    np.cumsum(lnEm[T - 1], axis=0)
-            else:
-                b = lnBeta[t_ + 1:t_ + dmax] + lnDur[1:dmax] + \
-                    np.cumsum(lnEm[t_ + 1:t_ + dmax], axis=0)
-            lnBetastar[t_] = np.logaddexp.reduce(b, axis=0)
-            b = lnBetastar[t_] + self._lnA
-            lnBeta[t_] = logsum(b, axis=1)
-        lnBeta[T - 1] = 1.0
+        for t in reversed(range(T - 1)):
+            # TODO: right-censoring
+            dmax = min(D, T - t)
+            b = lnBeta[t:t + dmax] + lnDur[:dmax] + \
+                np.cumsum(lnEm[t:t + dmax], axis=0)
+            lnBetastar[t] = np.logaddexp.reduce(b, axis=0)
+            if dmax < D:
+                lnBetastar[t] = np.logaddexp(
+                    lnBetastar[t], np.logaddexp.reduce(
+                        lnDur[dmax:], axis=0) + np.sum(lnEm[t:], axis=0))
+            if t > 0:
+                b = lnBetastar[t] + self._lnA
+                lnBeta[t - 1] = np.logaddexp.reduce(b, axis=1)
+        lnBeta[T - 1] = 0.0
         lnP = logsum(lnBetastar[0, :] + self._lnpi)
         return lnBeta, lnBetastar, lnP
 
@@ -155,7 +152,7 @@ class VbHsmm():
         return lnEm, lnDur
 
     def _e_step(self, lnEm, lnDur, lnAlpha,
-                lnAlphastar, lnBeta, lnBetastar, lnXi):
+                lnAlphastar, lnBeta, lnBetastar):
         """
         lnEm [ndarray, shape (n,n_states)] : loglikelihood of emissions
         lnAlpha [ndarray, shape (n, n_states]: log forward message
@@ -168,59 +165,61 @@ class VbHsmm():
             lnEm, lnDur, lnAlpha, lnAlphastar)
         lnBeta, lnBetastar, lnpx_b = self._backward(
             lnEm, lnDur, lnBeta, lnBetastar)
-
+        T = len(lnEm)
+        lnXi = np.zeros((T - 1, self.n_states, self.n_states))
         # check if forward and backward were done correctly
         dlnp = lnpx_f - lnpx_b
         if abs(dlnp) > 1.0e-6:
             print("warning forward and backward are not equivalent")
         # compute lnXi for updating transition matrix
-        lnXi = self._calculate_lnXi(lnXi, lnAlpha, lnBeta, lnEm, lnpx_f)
+        lnXi = self.posterior_transitions(self.n_states, lnXi, lnAlpha,
+                                          lnBeta, lnEm, self._lnA, lnpx_f)
         # compute lnGamma for postetior on hidden states
         lnGamma = lnAlpha + lnBeta - lnpx_f
-        return lnXi, lnGamma, lnpx_f
+        # compute lnDpost for postetior on duration
+        lnDpost = self.posterior_durations(
+            lnAlphastar, lnBeta, lnEm, lnDur, lnpx_f)
+        return lnXi, lnGamma, lnDpost, lnpx_f
 
-    def _calculate_lnXi(self, lnXi, lnAlpha, lnBetastar, lnEm, lnpx_f):
-        T = len(lnEm)
-        for i in range(self.n_states):
-            for j in range(self.n_states):
-                for t in range(T - 1):
-                    lnXi[t, i, j] = lnAlpha[t, i] + self._lnA[i, j, ] + \
-                        lnEm[t + 1, j] + lnBetastar[t, j]
-        lnXi -= lnpx_f
-        return lnXi
+    def _m_step(self, obs, lnXi, lnGamma, lnDpost):
+        self._calculate_sufficient_statistics(obs, lnGamma, lnXi, lnDpost)
+        self._update_parameters()
 
-    def _m_step(self, obs, lnXi, lnGamma):
-        self._calculate_sufficient_statistics(obs, lnGamma)
-        self._update_parameters(obs, lnXi, lnGamma)
+    def _calculate_sufficient_statistics(self, obs, lnGamma, lnXi, lnDpost):
+        # transitions
+        self.tr = np.exp(lnXi).sum(0)
+        self.counts = np.atleast_2d(self.tr).sum(0)
 
-    def _calculate_sufficient_statistics(self, obs, lnGamma):
-        # z[n,k] = Q(zn=k)
-        nmix = self.n_states
-        t = obs.shape[0]
-        self.z = np.exp(np.vstack(lnGamma))
-        self.z0 = np.exp([lg[0] for lg in lnGamma]).sum(0)
+        # emmitions
+        self.z = np.exp(lnGamma)
         # N_k in PRML(10.51)
         self._n = self.z.sum(0)
         # \bar{x}_k in PRML(10.52)
         self._xbar = np.dot(self.z.T, obs) / self._n[:, newaxis]
-        for k in range(nmix):
+        for k in range(self.n_states):
             d_obs = obs - self._xbar[k]
             # S_k in PRML(10.53)
             self._s[k] = np.dot((self.z[:, k] * d_obs.T), d_obs)
+        # durations
+        self.d = np.exp(lnDpost.T)
+        data = [np.arange(1, self.d[s].shape[0] + 1)
+                for s in range(self.n_states)]
+        weight = [self.d[s] for s in range(self.n_states)]
+        self._nd = sum(w.sum() for w in weight)
+        self._totd = sum(w.dot(d) for w, d in zip(weight, data))
 
     # TODO
-    def _update_parameters(self, obs, lnXi, lnGamma):
+    def _update_parameters(self):
         nmix = self.n_states
-        t = obs.shape[0]
         # update parameters of initial prob
-        self._wpi = self._upi + self.z0
+        self._wpi = self._upi + self.z[0]
         self._lnpi = e_lnpi_dirichlet(self._wpi)
 
         # update parameters of transition prob
-        self._wa = self._ua + np.exp(lnXi).sum()
-        # self._lnA = digamma(self._wa) - digamma(self._wa)
-        # for k in range(nmix):
-        #    self._lnA[k, :] = e_lnpi_dirichlet(self._wa[k, :])
+        self._wa = self._ua + self.counts
+        self._lnA = digamma(self._wa) - digamma(self._wa)
+        for k in range(nmix):
+            self._lnA[k, :] = e_lnpi_dirichlet(self._wa[k, :])
 
         # update parameters of emmition distr
         self._beta = self._beta0 + self._n
@@ -234,9 +233,8 @@ class VbHsmm():
                            self._beta[k] + self._n[k]) * np.outer(dx, dx)
 
         # update parameters of duration distribution
-        self._a = self._a0 + obs.sum()
-        self._b = self._b0 + t
-        # self._lambda = (self._a * np.exp(lnDpost).sum()) / self._b
+        self._a = self._a0 + self._nd
+        self._b = self._b0 + self._totd
         self._lambda = self._a / self._b
 
     def fit(self, obs, n_iter=10000, eps=1.0e-4,
@@ -244,15 +242,15 @@ class VbHsmm():
         '''Fit the HSMM via VB-EM algorithm'''
         self._initialize_vbhsmm(obs)
         old_f = 1.0e20
-        (lnAlpha, lnAlphastar, lnBeta,
-         lnBetastar, lnXi) = self._allocate_fb(obs)
+        (lnAlpha, lnAlphastar,
+            lnBeta, lnBetastar) = self._allocate_fb(obs)
 
         for i in range(n_iter):
             # VB-E step
             lnEm, lnDur = self._log_like_f(obs)
-            lnXi, lnGamma, lnp = self._e_step(
+            lnXi, lnGamma, lnDpost, lnp = self._e_step(
                 lnEm, lnDur, lnAlpha, lnAlphastar, lnBeta,
-                lnBetastar, lnXi)
+                lnBetastar)
             # check convergence
             kl = self._kl_div()
             f = -lnp + kl
@@ -270,7 +268,7 @@ class VbHsmm():
             old_f = f
             print(old_f)
             # update parameters via VB-M step
-            # self._m_step(obs, lnXi, lnGamma)
+            self._m_step(obs, lnXi, lnGamma, lnDpost)
 
     def _kl_div(self):
         """
@@ -294,7 +292,6 @@ class VbHsmm():
 
     def simulate(self, T, mu, cv):
         n, d = mu.shape
-
         pi_cdf = np.exp(self._lnpi).cumsum()
         A_cdf = np.exp(self._lnA).cumsum(1)
         z = np.zeros(T, dtype=np.int)
@@ -306,3 +303,27 @@ class VbHsmm():
             z[t] = (A_cdf[z[t - 1]] > r[t]).argmax()
             o[t] = sample_gaussian(mu[z[t]], cv[z[t]])
         return z, o
+
+    @staticmethod
+    def posterior_transitions(n_states, lnXi, lnAlpha, lnBetastar,
+                              lnEm, lnA, lnpx_f):
+        T = len(lnEm)
+        for i in range(n_states):
+            for j in range(n_states):
+                for t in range(T - 1):
+                    lnXi[t, i, j] = lnAlpha[t, i] + lnA[i, j, ] + \
+                        lnEm[t + 1, j] + lnBetastar[t, j]
+        lnXi -= lnpx_f
+        return lnXi
+
+    @staticmethod
+    def posterior_durations(lnAlphastar, lnBeta, lnEm, lnDur, lnpx_f):
+        # mattj's thesis (5.2.23)
+        T = len(lnEm)
+        logpmfs = -np.inf * np.ones_like(lnAlphastar)
+        for t in range(T):
+            lnEm_cum = np.cumsum(lnEm[t:T], axis=0)
+            np.logaddexp(lnDur[:T - t] + lnAlphastar[t] + lnBeta[t:] +
+                         lnEm_cum - lnpx_f,
+                         logpmfs[:T - t], out=logpmfs[:T - t])
+        return logpmfs
