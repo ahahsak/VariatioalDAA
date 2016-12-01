@@ -7,6 +7,7 @@ from scipy.spatial.distance import cdist
 from numpy.random import randn
 
 
+# caliculation function
 def logsum(A, axis=None):
     """
     Computes the sum of A assuming A is in the log domain.
@@ -24,6 +25,14 @@ def logsum(A, axis=None):
         # Look out for underflow.
         Asum[np.isnan(Asum)] = - np.Inf
     return Asum
+
+
+def _sym_quad_form(x, mu, A):
+    """
+    calculate x.T * inv(A) * x
+    """
+    q = (cdist(x, mu[np.newaxis], "mahalanobis", VI=inv(A))**2).reshape(-1)
+    return q
 
 
 def normalize(A, axis=None):
@@ -80,6 +89,7 @@ def lnz_wishart(nu, V):
     return lnZ
 
 
+# log likelihood function
 def log_like_gauss(obs, nu, V, beta, m):
     """
     Log probability for Gaussian with full covariance matrices.
@@ -115,14 +125,7 @@ def _log_like_poisson(x, lmbda):
     return raw
 
 
-def _sym_quad_form(x, mu, A):
-    """
-    calculate x.T * inv(A) * x
-    """
-    q = (cdist(x, mu[np.newaxis], "mahalanobis", VI=inv(A))**2).reshape(-1)
-    return q
-
-
+# mean of log function
 def e_lndetw_wishart(nu, V):
     """
     mean of log determinant of precision matrix over Wishart <lndet(W)>
@@ -140,6 +143,7 @@ def e_lnpi_dirichlet(alpha):
     return digamma(alpha) - digamma(alpha.sum())
 
 
+# KL divergence
 def kl_wishart(nu1, V1, nu2, V2):
     """
     KL-div of Wishart distribution KL[q(nu1,V1)||p(nu2,V2)]
@@ -201,6 +205,7 @@ def kl_poisson(lmbda1, lmbda2):
     return lmbda1 - lmbda2 + lmbda2 * np.log(lmbda2 / lmbda1)
 
 
+# sampling
 def sample_gaussian(m, cv, n=1):
     """Generate random samples from a Gaussian distribution.
     Parameters
