@@ -16,7 +16,7 @@ class VbHsmm():
     """
 
     def __init__(self, n, uPi0=0.5, uA0=0.5, m0=0.0,
-                 beta0=1, nu0=1, a0=2 * 30, b0=2.0,
+                 beta0=0.25, nu0=4, a0=2 * 30, b0=2.0,
                  lambda0=None, mf_a0=None, mf_b0=None, trunc=None):
 
         self.n_states = n
@@ -76,7 +76,7 @@ class VbHsmm():
         self._s = np.array(self._W)
 
         # Poisson
-        self._lambda = gamma(self._a + obs.sum(), 1 / (self._b + T))
+        self._lambda = gamma(self._a, 1 / self._b)
         self._a, self._b = self._lambda * self._b0, self._b0
 
     def _allocate_fb(self, obs):
@@ -86,65 +86,6 @@ class VbHsmm():
         lnBeta = np.zeros((T, self.n_states))  # log backward variable
         lnBetastar = np.zeros((T, self.n_states))
         return lnAlpha, lnAlphastar, lnBeta, lnBetastar
-
-    def _forward(self, lnEm, lnDur, lnAlpha, lnAlphastar):
-        """
-        Use forward algorith to calculate forward variables and loglikelihood
-        input
-          lnEm [ndarray, shape (n,n_states)] : loglikelihood of emissions
-          lnAlpha [ndarray, shape (n,n_states)] : log forward variable
-        output
-          lnAlpha [ndarray, shape (n,n_states)] : log forward variable
-          lnP [float] : lnP(X|theta)(normalizer)
-        """
-        T = len(lnEm)
-        D = self.trunc if self.trunc is not None else T
-        lnAlphastar[0] = self._lnpi
-        for t in range(T - 1):
-            dmax = min(D, t + 1)
-            a = lnAlphastar[t + 1 - dmax:t + 1] + lnDur[:dmax][::-1] + \
-                np.cumsum(lnEm[t + 1 - dmax:t + 1][::-1], axis=0)[::-1]
-            lnAlpha[t] = logsum(a, axis=0)
-
-            a = lnAlpha[t][:, newaxis] + self._lnA
-            lnAlphastar[t + 1] = logsum(a, axis=0)
-        t = T - 1
-        dmax = min(D, t + 1)
-        a = lnAlphastar[t + 1 - dmax:t + 1] + lnDur[:dmax][::-1] + \
-            np.cumsum(lnEm[t + 1 - dmax:t + 1][::-1], axis=0)[::-1]
-        lnAlpha[t] = logsum(a, axis=0)
-        lnP = logsum(lnAlpha[-1:])
-        return lnAlpha, lnAlphastar, lnP
-
-    def _backward(self, lnEm, lnDur, lnBeta, lnBetastar):
-        """
-        Use backward algorith to calculate backward variables and loglikelihood
-        input
-            lnEm [ndarray, shape (n,n_states)] : loglikelihood of emissions
-            lnBeta [ndarray, shape (n,n_states)] : log backward variable
-        output
-            lnBeta [ndarray, shape (n,n_states)] : log backward variable
-            lnP [float] : lnP(X|theta)(normalizer)
-        """
-        T = len(lnEm)
-        D = self.trunc if self.trunc is not None else T
-        lnBeta[T - 1] = 0.
-        for t in reversed(range(T - 1)):
-            # TODO: right-censoring
-            dmax = min(D, T - t)
-            b = lnBeta[t:t + dmax] + lnDur[:dmax] + \
-                np.cumsum(lnEm[t:t + dmax], axis=0)
-            lnBetastar[t] = np.logaddexp.reduce(b, axis=0)
-            if dmax < D:
-                lnBetastar[t] = np.logaddexp(
-                    lnBetastar[t], np.logaddexp.reduce(
-                        lnDur[dmax:], axis=0) + np.sum(lnEm[t:], axis=0))
-            if t > 0:
-                b = lnBetastar[t] + self._lnA
-                lnBeta[t - 1] = np.logaddexp.reduce(b, axis=1)
-        lnBeta[T - 1] = 0.0
-        lnP = logsum(lnBetastar[0, :] + self._lnpi)
-        return lnBeta, lnBetastar, lnP
 
     def _log_like_f(self, obs):
         lnEm = log_like_gauss(obs, self._nu, self._W, self._beta, self._m)
@@ -162,18 +103,20 @@ class VbHsmm():
         """
         # forward-backward algorithm
         lnAlpha, lnAlphastar, lnpx_f = self._forward(
-            lnEm, lnDur, lnAlpha, lnAlphastar)
+            self._lnpi, self._lnA, lnEm, lnDur,
+            lnAlpha, lnAlphastar, self.trunc)
         lnBeta, lnBetastar, lnpx_b = self._backward(
-            lnEm, lnDur, lnBeta, lnBetastar)
-        T = len(lnEm)
-        lnXi = np.zeros((T - 1, self.n_states, self.n_states))
+            self._lnpi, self._lnA, lnEm, lnDur,
+            lnBeta, lnBetastar, self.trunc)
+        # T = len(lnEm)
+        # lnXi = np.zeros((T - 1, self.n_states, self.n_states))
         # check if forward and backward were done correctly
-        dlnp = lnpx_f - lnpx_b
-        if abs(dlnp) > 1.0e-6:
-            print("warning forward and backward are not equivalent")
+        # dlnp = lnpx_f - lnpx_b
+        # if abs(dlnp) > 1.0e-6:
+        # print("warning forward and backward are not equivalent")
         # compute lnXi for updating transition matrix
-        lnXi = self.posterior_transitions(self.n_states, lnXi, lnAlpha,
-                                          lnBeta, lnEm, self._lnA, lnpx_f)
+        lnXi = self.posterior_transitions(self.n_states, lnAlpha,
+                                          lnBeta, self._lnA, lnpx_f)
         # compute lnGamma for postetior on hidden states
         lnGamma = lnAlpha + lnBeta - lnpx_f
         # compute lnDpost for postetior on duration
@@ -208,7 +151,6 @@ class VbHsmm():
         self._nd = sum(w.sum() for w in weight)
         self._totd = sum(w.dot(d) for w, d in zip(weight, data))
 
-    # TODO
     def _update_parameters(self):
         nmix = self.n_states
         # update parameters of initial prob
@@ -217,6 +159,7 @@ class VbHsmm():
 
         # update parameters of transition prob
         self._wa = self._ua + self.counts
+        self._weights = self._wa / self._wa.sum()  # for plotting
         self._lnA = digamma(self._wa) - digamma(self._wa)
         for k in range(nmix):
             self._lnA[k, :] = e_lnpi_dirichlet(self._wa[k, :])
@@ -251,6 +194,8 @@ class VbHsmm():
             lnXi, lnGamma, lnDpost, lnp = self._e_step(
                 lnEm, lnDur, lnAlpha, lnAlphastar, lnBeta,
                 lnBetastar)
+            # update parameters via VB-M step
+            self._m_step(obs, lnXi, lnGamma, lnDpost)
             # check convergence
             kl = self._kl_div()
             f = -lnp + kl
@@ -267,8 +212,6 @@ class VbHsmm():
                       (i, f, df))
             old_f = f
             print(old_f)
-            # update parameters via VB-M step
-            self._m_step(obs, lnXi, lnGamma, lnDpost)
 
     def _kl_div(self):
         """
@@ -305,16 +248,73 @@ class VbHsmm():
         return z, o
 
     @staticmethod
-    def posterior_transitions(n_states, lnXi, lnAlpha, lnBetastar,
-                              lnEm, lnA, lnpx_f):
+    def _forward(lnpi, lnA, lnEm, lnDur,
+                 lnAlpha, lnAlphastar, trunc=None):
+        """
+        Use forward algorith to calculate forward variables and loglikelihood
+        input
+          lnEm [ndarray, shape (n,n_states)] : loglikelihood of emissions
+          lnAlpha [ndarray, shape (n,n_states)] : log forward variable
+        output
+          lnAlpha [ndarray, shape (n,n_states)] : log forward variable
+          lnP [float] : lnP(X|theta)(normalizer)
+        """
         T = len(lnEm)
-        for i in range(n_states):
-            for j in range(n_states):
-                for t in range(T - 1):
-                    lnXi[t, i, j] = lnAlpha[t, i] + lnA[i, j, ] + \
-                        lnEm[t + 1, j] + lnBetastar[t, j]
-        lnXi -= lnpx_f
-        return lnXi
+        D = trunc if trunc is not None else T
+        lnAlphastar[0] = lnpi
+        for t in range(T - 1):
+            dmax = min(D, t + 1)
+            a = lnAlphastar[t + 1 - dmax:t + 1] + lnDur[:dmax][::-1] + \
+                np.cumsum(lnEm[t + 1 - dmax:t + 1][::-1], axis=0)[::-1]
+            lnAlpha[t] = logsum(a, axis=0)
+
+            a = lnAlpha[t][:, newaxis] + lnA
+            lnAlphastar[t + 1] = logsum(a, axis=0)
+        t = T - 1
+        dmax = min(D, t + 1)
+        a = lnAlphastar[t + 1 - dmax:t + 1] + lnDur[:dmax][::-1] + \
+            np.cumsum(lnEm[t + 1 - dmax:t + 1][::-1], axis=0)[::-1]
+        lnAlpha[t] = logsum(a, axis=0)
+        lnP = logsum(lnAlpha[-1:])
+        return lnAlpha, lnAlphastar, lnP
+
+    @staticmethod
+    def _backward(lnpi, lnA, lnEm, lnDur, lnBeta, lnBetastar, trunc=None):
+        """
+        Use backward algorith to calculate backward variables and loglikelihood
+        input
+            lnEm [ndarray, shape (n,n_states)] : loglikelihood of emissions
+            lnBeta [ndarray, shape (n,n_states)] : log backward variable
+        output
+            lnBeta [ndarray, shape (n,n_states)] : log backward variable
+            lnP [float] : lnP(X|theta)(normalizer)
+        """
+        T = len(lnEm)
+        D = trunc if trunc is not None else T
+        lnBeta[T - 1] = 0.
+        for t in reversed(range(T - 1)):
+            # TODO: right-censoring
+            dmax = min(D, T - t)
+            b = lnBeta[t:t + dmax] + lnDur[:dmax] + \
+                np.cumsum(lnEm[t:t + dmax], axis=0)
+            lnBetastar[t] = np.logaddexp.reduce(b, axis=0)
+            if dmax < D:
+                lnBetastar[t] = np.logaddexp(
+                    lnBetastar[t], np.logaddexp.reduce(
+                        lnDur[dmax:], axis=0) + np.sum(lnEm[t:], axis=0))
+            if t > 0:
+                b = lnBetastar[t] + lnA
+                lnBeta[t - 1] = np.logaddexp.reduce(b, axis=1)
+        lnBeta[T - 1] = 0.0
+        lnP = logsum(lnBetastar[0, :] + lnpi)
+        return lnBeta, lnBetastar, lnP
+
+    @staticmethod
+    def posterior_transitions(n_states, lnAlpha, lnBetastar, lnA, normalizer):
+        lntrans = lnAlpha[:-1, :, newaxis] + lnBetastar[1:, newaxis, :] +\
+            lnA[np.newaxis, ...]
+        lntrans -= normalizer
+        return lntrans
 
     @staticmethod
     def posterior_durations(lnAlphastar, lnBeta, lnEm, lnDur, lnpx_f):
